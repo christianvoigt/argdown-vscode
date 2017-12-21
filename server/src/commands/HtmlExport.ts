@@ -4,9 +4,7 @@ import Uri from 'vscode-uri';
 import { IArgdownSettings } from '../IArgdownSettings'
 export function exportHtml(argdownApp:any, settings:IArgdownSettings, rootPath:string){
     let settingsInputPath = Uri.parse(settings.htmlExportInput).fsPath;
-    argdownApp.logger.log("debug", "settingsInputPath: " + settingsInputPath);
     let inputPath = path.resolve(rootPath, settingsInputPath);
-    argdownApp.logger.log("debug", "inputPath: " + inputPath);
 
     let config: any = {};
     if (settings.configFile && settings.configFile !== "") {

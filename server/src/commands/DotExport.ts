@@ -1,7 +1,11 @@
 'use strict';
 import * as path from 'path';
+import Uri from 'vscode-uri';
 import { IArgdownSettings } from '../IArgdownSettings'
-export function exportDot(argdownApp: any, settings: IArgdownSettings, rootPath: string, inputPath: string) {
+export function exportDot(argdownApp: any, settings: IArgdownSettings, rootPath: string) {
+    let settingsInputPath = Uri.parse(settings.htmlExportInput).fsPath;
+    let inputPath = path.resolve(rootPath, settingsInputPath);
+
     let config: any = {};
     if (settings.configFile && settings.configFile !== "") {
         let configPath = path.resolve(rootPath, settings.configFile);

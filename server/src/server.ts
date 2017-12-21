@@ -266,7 +266,6 @@ connection.onExecuteCommand(async (params) => {
 			for(var workspaceFolder of workspaceFolders){
 				let settings = await getDocumentSettings(workspaceFolder.uri);
 				let rootPath = Uri.parse(workspaceFolder.uri).fsPath;
-				connection.console.log("settings: "+JSON.stringify(settings));
 				exportHtml(argdownApp, settings, rootPath);
 			}
 		}
@@ -279,9 +278,7 @@ connection.onExecuteCommand(async (params) => {
 			for (var workspaceFolder of workspaceFolders) {
 				let settings = await getDocumentSettings(workspaceFolder.uri);
 				let rootPath = Uri.parse(workspaceFolder.uri).fsPath;
-				let settingsPath = Uri.parse(settings.jsonExportInput).fsPath;
-				let inputPath = path.resolve(rootPath, settingsPath);
-				exportJSON(argdownApp, settings, rootPath, inputPath);
+				exportJSON(argdownApp, settings, rootPath);
 			}
 		}
 	}
@@ -293,9 +290,7 @@ connection.onExecuteCommand(async (params) => {
 			for (var workspaceFolder of workspaceFolders) {
 				let settings = await getDocumentSettings(workspaceFolder.uri);
 				let rootPath = Uri.parse(workspaceFolder.uri).fsPath;
-				let settingsPath = Uri.parse(settings.dotExportInput).fsPath;
-				let inputPath = path.resolve(rootPath, settingsPath);
-				exportDot(argdownApp, settings, rootPath, inputPath);
+				exportDot(argdownApp, settings, rootPath);
 			}
 		}
 	}
