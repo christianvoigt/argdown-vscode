@@ -6,23 +6,27 @@
 	"author": "Christian Voigt",
 	"license": "MIT",
 	"version": "0.0.1",
-	"publisher": "Christian Voigt",
+	"publisher": "christianvoigt",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/christianvoigt/argdown-vscode"
 	},
 	"bugs": {
 		"url": "https://github.com/christianvoigt/argdown-vscode/issues"
-	},	
+	},
 	"engines": {
 		"vscode": "^1.16.0"
 	},
 	"categories": [
-		"Languages","Linters"
+		"Languages",
+		"Linters"
 	],
 	"keywords": [
-		"multi-root ready", "argumentation", "argument mapping", "Markdown"
-	],	
+		"multi-root ready",
+		"argumentation",
+		"argument mapping",
+		"Markdown"
+	],
 	"activationEvents": [
 		"onLanguage:argdown",
 		"onCommand:argdown.exportHtml",
@@ -62,7 +66,7 @@
 				"uiTheme": "vs",
 				"path": "./themes/argdown-theme.json"
 			}
-		],		
+		],
 		"commands": [
 			{
 				"command": "argdown.exportHtml",
@@ -84,7 +88,7 @@
 				"title": "Run Argdown parser with config file",
 				"category": "Argdown"
 			}
-		],		
+		],
 		"configuration": {
 			"type": "object",
 			"title": "Argdown configuration",

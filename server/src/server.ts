@@ -60,9 +60,9 @@ connection.onInitialize((params: InitializeParams & Proposed.WorkspaceFoldersIni
 			// Tell the client that the server works in FULL text document sync mode
 			textDocumentSync: documents.syncKind,
 			// Tell the client that the server support code complete
-			completionProvider: {
-				resolveProvider: true,
-			},
+			// completionProvider: {
+			// 	resolveProvider: true,
+			// },
 			executeCommandProvider: {
 				commands: [EXPORT_HTML_COMMAND, EXPORT_DOT_COMMAND, EXPORT_JSON_COMMAND, RUN_COMMAND]
 			}
