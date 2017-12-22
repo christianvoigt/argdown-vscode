@@ -1,152 +1,152 @@
 {
-	"name": "argdown-vscode",
-	"displayName": "Argdown",
-	"description": "Syntax highlighting, linting and html/dot/json export for the Argdown argumentation syntax",
-	"icon": "argdown-icon.png",
-	"author": "Christian Voigt",
-	"license": "MIT",
-	"version": "0.0.1",
-	"publisher": "christianvoigt",
-	"repository": {
-		"type": "git",
-		"url": "https://github.com/christianvoigt/argdown-vscode"
-	},
-	"bugs": {
-		"url": "https://github.com/christianvoigt/argdown-vscode/issues"
-	},
-	"engines": {
-		"vscode": "^1.16.0"
-	},
-	"categories": [
-		"Languages",
-		"Linters"
-	],
-	"keywords": [
-		"multi-root ready",
-		"argumentation",
-		"argument mapping",
-		"Markdown"
-	],
-	"activationEvents": [
-		"onLanguage:argdown",
-		"onCommand:argdown.exportHtml",
-		"onCommand:argdown.exportDot",
-		"onCommand:argdown.exportJSON",
-		"onCommand:argdown.run",
-		"workspaceContains:**/*.{argdown,ad,argdn,adown}"
-	],
-	"main": "./out/src/extension",
-	"contributes": {
-		"languages": [
-			{
-				"id": "argdown",
-				"aliases": [
-					"Argdown",
-					"argdown"
-				],
-				"extensions": [
-					".ad",
-					".adown",
-					".argdown",
-					".argdn"
-				],
-				"configuration": "./language-configuration.json"
-			}
-		],
-		"grammars": [
-			{
-				"language": "argdown",
-				"scopeName": "text.html.argdown",
-				"path": "./syntaxes/argdown.tmLanguage.json"
-			}
-		],
-		"themes": [
-			{
-				"label": "Argdown Theme",
-				"uiTheme": "vs",
-				"path": "./themes/argdown-theme.json"
-			}
-		],
-		"commands": [
-			{
-				"command": "argdown.exportHtml",
-				"title": "Export Argdown files to HTML",
-				"category": "Argdown"
-			},
-			{
-				"command": "argdown.exportJSON",
-				"title": "Export Argdown files to JSON",
-				"category": "Argdown"
-			},
-			{
-				"command": "argdown.exportDot",
-				"title": "Export Argdown files to Dot",
-				"category": "Argdown"
-			},
-			{
-				"command": "argdown.run",
-				"title": "Run Argdown parser with config file",
-				"category": "Argdown"
-			}
-		],
-		"configuration": {
-			"type": "object",
-			"title": "Argdown configuration",
-			"properties": {
-				"argdown.htmlDirectory": {
-					"scope": "resource",
-					"type": "string",
-					"default": "html",
-					"description": "The output folder for the html export (can be absolute or relative to workspace root folder)"
-				},
-				"argdown.htmlExportInput": {
-					"scope": "resource",
-					"type": "string",
-					"default": "**/*{.argdown, .ad, .adn, .argdn}",
-					"description": "The files that should be exported to HTML"
-				},
-				"argdown.dotDirectory": {
-					"scope": "resource",
-					"type": "string",
-					"default": "dot",
-					"description": "The output folder for the html export (can be absolute or relative to workspace root folder)"
-				},
-				"argdown.dotExportInput": {
-					"scope": "resource",
-					"type": "string",
-					"default": "**/*{.argdown, .ad, .adn, .argdn}",
-					"description": "The files that should be exported to Dot"
-				},
-				"argdown.jsonDirectory": {
-					"scope": "resource",
-					"type": "string",
-					"default": "json",
-					"description": "The output folder for the json export (can be absolute or relative to workspace root folder)"
-				},
-				"argdown.jsonExportInput": {
-					"scope": "resource",
-					"type": "string",
-					"default": "**/*{.argdown, .ad, .adn, .argdn}",
-					"description": "The files that should be exported to JSON"
-				},
-				"argdown.configFile": {
-					"scope": "resource",
-					"type": "string",
-					"default": "argdown.config.js",
-					"description": "Path at which the parser should look for an Argdown config file."
-				}
-			}
-		}
-	},
-	"scripts": {
-		"vscode:prepublish": "tsc -p ./",
-		"compile": "tsc -p ./",
-		"watch": "tsc -w -p ./",
-		"update-vscode": "node ./node_modules/vscode/bin/install",
-		"postinstall": "node ./node_modules/vscode/bin/install"
-	},
-	"dependencies": {
-		"vscode": "^1.1.5",
-		"vscode-languageclient": "^3.4.2"
-	}
+    "name": "argdown-vscode",
+    "displayName": "Argdown",
+    "description": "Syntax highlighting, linting and html/dot/json export for the Argdown argumentation syntax",
+    "icon": "argdown-icon.png",
+    "author": "Christian Voigt",
+    "license": "MIT",
+    "version": "0.0.2",
+    "publisher": "christianvoigt",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/christianvoigt/argdown-vscode"
+    },
+    "bugs": {
+        "url": "https://github.com/christianvoigt/argdown-vscode/issues"
+    },
+    "engines": {
+        "vscode": "^1.16.0"
+    },
+    "categories": [
+        "Languages",
+        "Linters"
+    ],
+    "keywords": [
+        "multi-root ready",
+        "argumentation",
+        "argument mapping",
+        "Markdown"
+    ],
+    "activationEvents": [
+        "onLanguage:argdown",
+        "onCommand:argdown.exportHtml",
+        "onCommand:argdown.exportDot",
+        "onCommand:argdown.exportJSON",
+        "onCommand:argdown.run",
+        "workspaceContains:**/*.{argdown,ad,argdn,adown}"
+    ],
+    "main": "./out/src/extension",
+    "contributes": {
+        "languages": [
+            {
+                "id": "argdown",
+                "aliases": [
+                    "Argdown",
+                    "argdown"
+                ],
+                "extensions": [
+                    ".ad",
+                    ".adown",
+                    ".argdown",
+                    ".argdn"
+                ],
+                "configuration": "./language-configuration.json"
+            }
+        ],
+        "grammars": [
+            {
+                "language": "argdown",
+                "scopeName": "text.html.argdown",
+                "path": "./syntaxes/argdown.tmLanguage.json"
+            }
+        ],
+        "themes": [
+            {
+                "label": "Argdown Theme",
+                "uiTheme": "vs",
+                "path": "./themes/argdown-theme.json"
+            }
+        ],
+        "commands": [
+            {
+                "command": "argdown.exportHtml",
+                "title": "Export Argdown files to HTML",
+                "category": "Argdown"
+            },
+            {
+                "command": "argdown.exportJSON",
+                "title": "Export Argdown files to JSON",
+                "category": "Argdown"
+            },
+            {
+                "command": "argdown.exportDot",
+                "title": "Export Argdown files to Dot",
+                "category": "Argdown"
+            },
+            {
+                "command": "argdown.run",
+                "title": "Run Argdown parser with config file",
+                "category": "Argdown"
+            }
+        ],
+        "configuration": {
+            "type": "object",
+            "title": "Argdown configuration",
+            "properties": {
+                "argdown.htmlDirectory": {
+                    "scope": "resource",
+                    "type": "string",
+                    "default": "html",
+                    "description": "The output folder for the html export (can be absolute or relative to workspace root folder)"
+                },
+                "argdown.htmlExportInput": {
+                    "scope": "resource",
+                    "type": "string",
+                    "default": "**/*{.argdown, .ad, .adn, .argdn}",
+                    "description": "The files that should be exported to HTML"
+                },
+                "argdown.dotDirectory": {
+                    "scope": "resource",
+                    "type": "string",
+                    "default": "dot",
+                    "description": "The output folder for the html export (can be absolute or relative to workspace root folder)"
+                },
+                "argdown.dotExportInput": {
+                    "scope": "resource",
+                    "type": "string",
+                    "default": "**/*{.argdown, .ad, .adn, .argdn}",
+                    "description": "The files that should be exported to Dot"
+                },
+                "argdown.jsonDirectory": {
+                    "scope": "resource",
+                    "type": "string",
+                    "default": "json",
+                    "description": "The output folder for the json export (can be absolute or relative to workspace root folder)"
+                },
+                "argdown.jsonExportInput": {
+                    "scope": "resource",
+                    "type": "string",
+                    "default": "**/*{.argdown, .ad, .adn, .argdn}",
+                    "description": "The files that should be exported to JSON"
+                },
+                "argdown.configFile": {
+                    "scope": "resource",
+                    "type": "string",
+                    "default": "argdown.config.js",
+                    "description": "Path at which the parser should look for an Argdown config file."
+                }
+            }
+        }
+    },
+    "scripts": {
+        "vscode:prepublish": "tsc -p ./",
+        "compile": "tsc -p ./",
+        "watch": "tsc -w -p ./",
+        "update-vscode": "node ./node_modules/vscode/bin/install",
+        "postinstall": "node ./node_modules/vscode/bin/install"
+    },
+    "dependencies": {
+        "vscode": "^1.1.5",
+        "vscode-languageclient": "^3.4.2"
+    }
 }

@@ -1,14 +1,25 @@
 # Argdown for Visual Studio Code
 
-This extension provides the following features:
+Argdown is a simple syntax for analyzing argumentation, inspired by Markdown. This extension provides the following features for Argdown:
 
 - Syntax highlighting
 - Linting
 - Html, Dot and JSON Export
 
-Currently the extension is still in its alpha phase. More features and better documentation will be added over time. 
+The extension is still in its alpha phase. More features and better documentation will be added over time. 
 
 For more information about the Argdown argumentation syntax visit the central [Argdown repository](https://github.com/christianvoigt/argdown).
+
+## Activating the Argdown theme
+
+Standard themes do not highlight Argdown attack and support relations. For complete syntax highlighting, please activate the Argdown theme:
+
+1. Go to `Code/Preferences/Color Theme` in the main application menu
+2. Select `Argdown Theme` from the list of available themes
+
+The Argdown theme is the default VS Code light theme, enhanced by some Argdown-specific features, so it will also work with other languages.
+
+We hope that VS Code will add support for language-specific themes in the future, so that the Argdown theme will only be active for Argdown files.
 
 ## Exporting Argdown files to HTML, Dot and JSON
 
@@ -51,6 +62,6 @@ By default, HTML files are saved in a `./html` folder, json files in a `./dot` f
 
 ### Using argdown.config.js for advanced configuration options
 
-You can create `argdown.config.js` files in your workspace folders as described in the [argdown-cli Readme](https://github.com/christianvoigt/argdown-cli)  to change the way the Argdown commands are executed. Using config files you can achieve anything you can do with the Argdown Commandline Interface.
+You can create `argdown.config.js` files in your workspace folders  to change the way the Argdown commands are executed. Using config files you can achieve anything you can do with the Argdown Commandline Interface.
 
-If you define a `process` property in your config file, you can run the `Argdown: Run Argdown parser with config file` to run your custom process (only suited for advanced Argdown users).
+[Visit the config documentation](https://github.com/christianvoigt/argdown/tree/master/docs/Configuration.md) at the central Argdown repository to learn more about the format of the config file.
