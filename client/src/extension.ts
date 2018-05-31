@@ -1,121 +1,158 @@
-/* --------------------------------------------------------------------------------------------
- * Copyright (c) Microsoft Corporation. All rights reserved.
- * Licensed under the MIT License. See License.txt in the project root for license information.
- * ------------------------------------------------------------------------------------------ */
-'use strict';
+"use strict";
 
-import * as path from 'path';
-import {IArgdownSettings} from './IArgdownSettings'
+import * as path from "path";
 
-import { workspace, ExtensionContext, WorkspaceConfiguration, Disposable } from 'vscode';
+// import * as vscode from "vscode";
+import * as vscode from "vscode";
 import {
-	LanguageClient, LanguageClientOptions, ServerOptions, TransportKind, CancellationToken, Middleware,
-	DidChangeConfigurationNotification, Proposed, ProposedFeatures } from 'vscode-languageclient';
+  LanguageClient,
+  LanguageClientOptions,
+  ServerOptions,
+  TransportKind,
+  Middleware,
+  ProposedFeatures
+} from "vscode-languageclient";
+import { LanguageServerConfiguration } from "./LanguageServerConfiguration";
+import { CommandManager } from "./commands/CommandManager";
+import * as commands from "./commands/index";
+
+import { ArgdownEngine } from "./preview/ArgdownEngine";
+import { ArgdownPreviewManager } from "./preview/ArgdownPreviewManager";
+import { Logger } from "./preview/Logger";
+import { ArgdownContentProvider } from "./preview/ArgdownContentProvider";
+import {
+  ExtensionContentSecurityPolicyArbiter,
+  PreviewSecuritySelector
+} from "./preview/security";
+import { ArgdownExtensionContributions } from "./preview/ArgdownExtensionContributions";
 
 let client: LanguageClient;
+let languageServerConfiguration: LanguageServerConfiguration;
 
-namespace Configuration {
-	let configurationListener: Disposable;
+export function activate(context: vscode.ExtensionContext) {
+  // -- PREVIEW --
+  const logger = new Logger();
+  const argdownEngine = new ArgdownEngine(logger);
+  const cspArbiter = new ExtensionContentSecurityPolicyArbiter(
+    context.globalState,
+    context.workspaceState
+  );
+  const contributions = new ArgdownExtensionContributions();
+  const contentProvider = new ArgdownContentProvider(
+    argdownEngine,
+    context,
+    cspArbiter,
+    contributions,
+    logger
+  );
 
-	// Convert VS Code specific settings to a format acceptable by the server. Since
-	// both client and server do use JSON the conversion is trivial. 
-	export function computeConfiguration(params: Proposed.ConfigurationParams, _token: CancellationToken, _next: Function): any[] {
-		if (!params.items) {
-			return null;
-		}
-		let result: (IArgdownSettings | null)[] = [];
-		for (let item of params.items) {
-			// The server asks the client for configuration settings without a section
-			// If a section is present we return null to indicate that the configuration
-			// is not supported.
-			if (item.section) {
-				result.push(null);
-				continue;
-			}
-			let config: WorkspaceConfiguration;
-			if (item.scopeUri) {
-				config = workspace.getConfiguration('argdown', client.protocol2CodeConverter.asUri(item.scopeUri));
-			} else {
-				config = workspace.getConfiguration('argdown');
-			}
-			result.push({
-				configFile: config.get('configFile'),
-				htmlDirectory: config.get('htmlDirectory'),
-				dotDirectory: config.get("dotDirectory"),
-				jsonDirectory: config.get("jsonDirectory"),
-				jsonExportInput: config.get("jsonExportInput"),
-				htmlExportInput: config.get("htmlExportInput"),
-				dotExportInput: config.get("dotExportInput")
-			});
-		}
-		return result;
-	}
+  const previewManager = new ArgdownPreviewManager(
+    contentProvider,
+    logger,
+    contributions
+  );
+  const previewSecuritySelector = new PreviewSecuritySelector(
+    cspArbiter,
+    previewManager
+  );
 
-	export function initialize() {
-		// VS Code currently doesn't sent fine grained configuration changes. So we 
-		// listen to any change. However this will change in the near future.
-		configurationListener = workspace.onDidChangeConfiguration(() => {
-			client.sendNotification(DidChangeConfigurationNotification.type, { settings: null });
-		});
-	}
+  const commandManager = new CommandManager();
+  context.subscriptions.push(commandManager);
+  commandManager.register(new commands.ShowPreviewCommand(previewManager));
+  commandManager.register(
+    new commands.ShowPreviewToSideCommand(previewManager)
+  );
+  commandManager.register(
+    new commands.ShowLockedPreviewToSideCommand(previewManager)
+  );
+  commandManager.register(new commands.ShowSourceCommand(previewManager));
+  commandManager.register(new commands.RefreshPreviewCommand(previewManager));
+  commandManager.register(new commands.MoveCursorToPositionCommand());
+  commandManager.register(
+    new commands.ShowPreviewSecuritySelectorCommand(
+      previewSecuritySelector,
+      previewManager
+    )
+  );
+  commandManager.register(new commands.OnPreviewStyleLoadErrorCommand());
+  commandManager.register(new commands.OpenDocumentLinkCommand());
+  commandManager.register(new commands.ToggleLockCommand(previewManager));
+  commandManager.register(new commands.ExportDocumentToHtmlCommand());
+  commandManager.register(new commands.ExportDocumentToJsonCommand());
+  commandManager.register(new commands.ExportDocumentToDotCommand());
+  commandManager.register(new commands.ExportDocumentToVizjsSvgCommand());
+  commandManager.register(new commands.ExportDocumentToVizjsPdfCommand());
+  commandManager.register(new commands.ExportContentToVizjsPngCommand());
+  commandManager.register(new commands.ExportContentToDagreSvgCommand(logger));
+  commandManager.register(new commands.ExportContentToDagrePngCommand());
+  commandManager.register(new commands.ExportContentToDagrePdfCommand());
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(() => {
+      logger.updateConfiguration();
+      previewManager.updateConfiguration();
+    })
+  );
+  // --- LANGUGAGE SERVER ---
 
-	export function dispose() {
-		if (configurationListener) {
-			configurationListener.dispose();
-		}
-	}
-}
+  // The server is implemented in node
+  let serverModule = context.asAbsolutePath(path.join("server", "server.js"));
+  // The debug options for the server
+  let debugOptions = { execArgv: ["--nolazy", "--inspect=6009"] };
 
-export function activate(context: ExtensionContext) {
-	// The server is implemented in node
-	let serverModule = context.asAbsolutePath(path.join('server', 'server.js'));
-	// The debug options for the server
-	let debugOptions = { execArgv: ["--nolazy", "--inspect=6009"] };
-	
-	// If the extension is launched in debug mode then the debug server options are used
-	// Otherwise the run options are used
-	let serverOptions: ServerOptions = {
-		run : { module: serverModule, transport: TransportKind.ipc },
-		debug: { module: serverModule, transport: TransportKind.ipc, options: debugOptions }
-	}
+  // If the extension is launched in debug mode then the debug server options are used
+  // Otherwise the run options are used
+  let serverOptions: ServerOptions = {
+    run: { module: serverModule, transport: TransportKind.ipc },
+    debug: {
+      module: serverModule,
+      transport: TransportKind.ipc,
+      options: debugOptions
+    }
+  };
 
-	let middleware: ProposedFeatures.ConfigurationMiddleware | Middleware = {
-		workspace: {
-			configuration: Configuration.computeConfiguration
-		}
-	};
+  languageServerConfiguration = new LanguageServerConfiguration();
+  let middleware: ProposedFeatures.ConfigurationMiddleware | Middleware = {
+    workspace: {
+      configuration: languageServerConfiguration.computeConfiguration
+    }
+  };
 
-	// Options to control the language client
-	let clientOptions: LanguageClientOptions = {
-		// Register the server for plain text documents
-		documentSelector: [{scheme: 'file', language: 'argdown'}],
-		synchronize: {
-			// Notify the server about file changes to '.clientrc files contain in the workspace
-			fileEvents: workspace.createFileSystemWatcher('**/.clientrc')
-			// In the past this told the client to actively synchronize settings. Since the
-			// client now supports 'getConfiguration' requests this active synchronization is not
-			// necessary anymore. 
-			// configurationSection: [ 'lspMultiRootSample' ]
-		},
-		middleware: middleware as Middleware,
-		outputChannelName: "Argdown Language Server"
-	}
-	// Create the language client and start the client.
-	client = new LanguageClient('argdownLanguageServer', 'Argdown Language Server', serverOptions, clientOptions);
-	// Register new proposed protocol if available.
-	client.registerProposedFeatures();
-	client.onReady().then(() => {
-		Configuration.initialize();
-	});
+  // Options to control the language client
+  let clientOptions: LanguageClientOptions = {
+    // Register the server for plain text documents
+    documentSelector: [{ scheme: "file", language: "argdown" }],
+    synchronize: {
+      // Notify the server about file changes to '.clientrc files contain in the workspace
+      fileEvents: vscode.workspace.createFileSystemWatcher("**/.clientrc")
+      // In the past this told the client to actively synchronize settings. Since the
+      // client now supports 'getConfiguration' requests this active synchronization is not
+      // necessary anymore.
+      // configurationSection: [ 'lspMultiRootSample' ]
+    },
+    middleware: middleware as Middleware,
+    outputChannelName: "Argdown Language Server"
+  };
+  // Create the language client and start the client.
+  client = new LanguageClient(
+    "argdownLanguageServer",
+    "Argdown Language Server",
+    serverOptions,
+    clientOptions
+  );
+  // Register new proposed protocol if available.
+  client.registerProposedFeatures();
+  client.onReady().then(() => {
+    languageServerConfiguration.initialize(client);
+  });
 
-	// Start the client. This will also launch the server
-	client.start();	
+  // Start the client. This will also launch the server
+  client.start();
 }
 
 export function deactivate(): Thenable<void> {
-	if (!client) {
-		return undefined;
-	}
-	Configuration.dispose();
-	return client.stop();
+  if (!client) {
+    return Promise.resolve();
+  }
+  languageServerConfiguration.dispose();
+  return client.stop();
 }

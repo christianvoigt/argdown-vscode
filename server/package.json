@@ -1,25 +1,26 @@
 {
-	"name": "argdown-language-server",
-	"description": "Language Server for Argdown.",
-	"version": "0.0.1",
-	"author": "Christian Voigt",
-	"license": "MIT",
-	"engines": {
-		"node": "*"
-	},
-	"repository": {
-		"type": "git",
-		"url": "https://github.com/Microsoft/vscode-extension-samples"
-	},
-	"dependencies": {
-		"@types/node": "^8.0.53",
-		"argdown-cli": "^0.6.2",
-		"vscode-languageserver": "^3.4.2",
-		"vscode-uri": "^1.0.1"
-	},
-	"scripts": {
-		"installServer": "installServerIntoExtension ../client ./package.json ./tsconfig.json",
-		"compile": "installServerIntoExtension ../client ./package.json ./tsconfig.json && tsc -p .",
-		"watch": "installServerIntoExtension ../client ./package.json ./tsconfig.json && tsc -w -p ."
-	}
+  "name": "argdown-language-server",
+  "description": "Language Server for Argdown.",
+  "version": "0.0.1",
+  "author": "Christian Voigt",
+  "license": "MIT",
+  "engines": {
+    "node": "*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Microsoft/vscode-extension-samples"
+  },
+  "dependencies": {
+    "@types/node": "^8.0.53",
+    "argdown-cli": "^0.11.7",
+    "vscode-languageserver": "^3.4.2",
+    "vscode-uri": "^1.0.1"
+  },
+  "scripts": {
+    "installServer": "installServerIntoExtension ../client ./package.json ./tsconfig.json",
+    "compile": "installServerIntoExtension ../client ./package.json ./tsconfig.json && tsc -p .",
+    "watch": "installServerIntoExtension ../client ./package.json ./tsconfig.json && tsc -w -p ."
+  },
+  "devDependencies": {}
 }
