@@ -1,9 +1,5 @@
-/*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
- *  Licensed under the MIT License. See License.txt in the project root for license information.
- *--------------------------------------------------------------------------------------------*/
-
-export interface PreviewSettings {
+const defaultsDeep = require("lodash.defaultsdeep");
+export interface IPreviewSettings {
   source: string;
   line: number;
   lineCount: number;
@@ -15,11 +11,23 @@ export interface PreviewSettings {
   x?: number;
   y?: number;
   didInitiate?: boolean;
+  dagre: {
+    rankDir: string;
+    rankSep: number;
+    nodeSep: number;
+  };
 }
 
-let cachedSettings: PreviewSettings | undefined = undefined;
+let cachedSettings: IPreviewSettings | undefined = undefined;
+let defaults = {
+  dagre: {
+    rankDir: "BT",
+    rankSep: 50,
+    nodeSep: 70
+  }
+};
 
-export function getSettings(): PreviewSettings {
+export function getSettings(): IPreviewSettings {
   if (cachedSettings) {
     return cachedSettings;
   }
@@ -28,7 +36,7 @@ export function getSettings(): PreviewSettings {
   if (element) {
     const data = element.getAttribute("data-settings");
     if (data) {
-      cachedSettings = JSON.parse(data);
+      cachedSettings = defaultsDeep(JSON.parse(data), defaults);
       return cachedSettings!;
     }
   }

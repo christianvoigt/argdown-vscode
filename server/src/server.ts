@@ -4,13 +4,16 @@ import {
   createConnection,
   TextDocuments,
   TextDocument,
+  TextDocumentPositionParams,
   Diagnostic,
   DiagnosticSeverity,
   Range,
   InitializeParams,
   InitializeResult,
   ProposedFeatures,
-  Proposed
+  Proposed,
+  SymbolInformation,
+  WorkspaceSymbolParams
 } from "vscode-languageserver";
 import Uri from "vscode-uri";
 import { IArgdownSettings } from "./IArgdownSettings";
@@ -20,6 +23,11 @@ import {
   ExportContentArgs,
   ExportDocumentArgs
 } from "./commands/Export";
+import { documentSymbolsPlugin } from "./DocumentSymbolsPlugin";
+import * as fs from "fs";
+import { promisify } from "util";
+import { findDefinitions } from "./SymbolQuery";
+const readFile = promisify(fs.readFile);
 
 const EXPORT_CONTENT_COMMAND = "argdown.server.exportContent";
 const EXPORT_DOCUMENT_COMMAND = "argdown.server.exportDocument";
@@ -78,6 +86,9 @@ connection.onInitialize(
         // completionProvider: {
         // 	resolveProvider: true,
         // },
+        documentSymbolProvider: true,
+        workspaceSymbolProvider: true,
+        definitionProvider: true,
         executeCommandProvider: {
           commands: [
             EXPORT_DOCUMENT_COMMAND,
@@ -284,6 +295,66 @@ connection.onDidCloseTextDocument((params) => {
 });
 */
 
+connection.onDefinition(async (params: TextDocumentPositionParams) => {
+  const { textDocument, position } = params;
+  const path = Uri.parse(textDocument.uri).fsPath;
+  const request = {
+    inputPath: path,
+    process: ["preprocessor", "parse-input", "build-model"],
+    logLevel: "verbose"
+  };
+  const responses = await argdownEngine.load(request);
+  return findDefinitions(responses[0], textDocument.uri, position, connection);
+});
+
+argdownEngine.addPlugin(documentSymbolsPlugin, "add-document-symbols");
+
+connection.onDocumentSymbol(async (params: TextDocumentPositionParams) => {
+  const path = Uri.parse(params.textDocument.uri).fsPath;
+  const input = await readFile(path);
+  const request = {
+    inputPath: path,
+    input: input.toString(),
+    process: [
+      "preprocessor",
+      "parse-input",
+      "build-model",
+      "add-document-symbols"
+    ],
+    logLevel: "verbose",
+    inputUri: params.textDocument.uri
+  };
+  const response = await argdownEngine.runAsync(request);
+  return response.documentSymbols;
+});
+connection.onWorkspaceSymbol(async (params: WorkspaceSymbolParams) => {
+  const workspaceSymbols: SymbolInformation[] = <SymbolInformation[]>[];
+  const query = params.query;
+  for (var workspaceFolder of workspaceFolders) {
+    const rootPath = Uri.parse(workspaceFolder.uri).fsPath;
+    const inputPath = rootPath + "/**/*.{ad,argdown}";
+    const request = {
+      inputPath,
+      process: [
+        "preprocessor",
+        "parse-input",
+        "build-model",
+        "add-document-symbols"
+      ],
+      logLevel: "verbose"
+    };
+    const responses: any[] = await argdownEngine.load(request);
+    connection.console.log("responses: " + responses.length);
+    const folderSymbols = responses
+      .map<SymbolInformation[]>(r => <SymbolInformation[]>r.documentSymbols)
+      .reduce((acc, val) => acc.concat(val), []);
+    connection.console.log("folderSymbols: " + folderSymbols.length);
+    workspaceSymbols.push(...folderSymbols);
+  }
+  connection.console.log("workspaceSymbols: " + workspaceSymbols.length);
+  connection.console.log(JSON.stringify(workspaceSymbols));
+  return workspaceSymbols.filter(s => s && s.name.indexOf(query) !== -1);
+});
 connection.onExecuteCommand(async params => {
   if (params.command === EXPORT_CONTENT_COMMAND) {
     if (!params.arguments) {
@@ -292,7 +363,6 @@ connection.onExecuteCommand(async params => {
     const args = params.arguments[0] as ExportContentArgs;
     await exportContent(argdownEngine, args);
   } else if (params.command === EXPORT_DOCUMENT_COMMAND) {
-    connection.console.log("EXPORT_DOCUMENT_COMMAND received");
     if (!params.arguments) {
       return;
     }

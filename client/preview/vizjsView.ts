@@ -1,34 +1,13 @@
 import * as d3 from "d3";
-import { ActiveLineMarker } from "./activeLineMarker";
 import { onceDocumentLoaded } from "./events";
 import { createPosterForVsCode } from "./messaging";
-import {
-  getEditorLineNumberForPageOffset,
-  scrollToRevealSourceLine
-} from "./scroll-sync";
-import { getSettings } from "./settings";
+import { getSettings, IPreviewSettings } from "./settings";
 import throttle = require("lodash.throttle");
 import { initMenu } from "./menu";
 import { getPngAsString } from "./export";
 import { openScaleDialog } from "./scaleDialog";
 
 declare var acquireVsCodeApi: any;
-
-var scrollDisabled = true;
-const marker = new ActiveLineMarker();
-const settings = getSettings();
-
-let scale = settings.hasOwnProperty("scale") ? settings.scale! : 0.75;
-let translateX = settings.hasOwnProperty("x") ? settings.x! : 0;
-let translateY = settings.hasOwnProperty("y") ? settings.y! : 0;
-const sendDidChangeZoom = throttle(() => {
-  messagePoster.postMessage("didChangeZoom", {
-    scale: scale,
-    x: translateX,
-    y: translateY
-  });
-}, 50);
-
 const vscode = acquireVsCodeApi();
 vscode.postMessage({});
 
@@ -38,75 +17,113 @@ initMenu(messagePoster);
 window.cspAlerter.setPoster(messagePoster);
 window.styleLoadingMonitor.setPoster(messagePoster);
 
-const loadSvg = (vizjsSvg: string = "", isUpdate: boolean = false) => {
+const settings = getSettings();
+interface IVizjsViewState {
+  settings: IPreviewSettings;
+  scale: number;
+  x: number;
+  y: number;
+  svg?: d3.Selection<SVGSVGElement, null, HTMLElement, any>;
+  zoom?: d3.ZoomBehavior<SVGSVGElement, null>;
+  graphSize: {
+    width: number;
+    height: number;
+  };
+}
+const state: IVizjsViewState = {
+  settings: settings,
+  scale: settings.hasOwnProperty("scale") ? settings.scale! : 0.75,
+  x: settings.hasOwnProperty("x") ? settings.x! : 0,
+  y: settings.hasOwnProperty("y") ? settings.y! : 0,
+  graphSize: {
+    width: 0,
+    height: 0
+  }
+};
+
+const sendDidChangeZoom = throttle((state: IVizjsViewState) => {
+  messagePoster.postMessage("didChangeZoom", {
+    scale: state.scale,
+    x: state.x,
+    y: state.y
+  });
+}, 50);
+
+const loadSvg = (
+  vizjsSvg: string = "",
+  state: IVizjsViewState,
+  isUpdate: boolean = false
+) => {
   const svgContainer = d3.select<HTMLElement, null>("#svg-container")!;
   if (vizjsSvg) {
     svgContainer.select("*").remove();
     svgContainer.html(vizjsSvg);
   }
-  const svg = svgContainer.select<SVGSVGElement>("svg");
-  const svgGroup = svg.select<SVGGraphicsElement>("g");
-  svg.attr("class", "map-svg");
-  svg.attr("width", "100%");
-  svg.attr("height", "100%");
-  svg.attr("viewBox", null);
-  var zoom = d3.zoom<SVGSVGElement, null>().on("zoom", function() {
+  state.svg = svgContainer.select<SVGSVGElement>("svg");
+  const svgGroup = state.svg.select<SVGGraphicsElement>("g");
+  state.svg.attr("class", "map-svg");
+  state.svg.attr("width", "100%");
+  state.svg.attr("height", "100%");
+  state.svg.attr("viewBox", null);
+  state.zoom = d3.zoom<SVGSVGElement, null>().on("zoom", function() {
     // eslint-disable-next-line
     svgGroup.attr("transform", d3.event.transform);
-    scale = d3.event.transform.k;
-    translateX = d3.event.transform.x;
-    translateY = d3.event.transform.y;
-    sendDidChangeZoom();
+    state.scale = d3.event.transform.k;
+    state.x = d3.event.transform.x;
+    state.y = d3.event.transform.y;
+    sendDidChangeZoom(state);
   });
-  svg.call(zoom);
-  const svgNode: SVGElement = svg!.node() as SVGElement;
-  const svgSize = svgNode.getBoundingClientRect();
+  state.svg.call(state.zoom);
   const groupNode: SVGGraphicsElement = svgGroup!.node() as SVGGraphicsElement;
-  const groupSize = groupNode.getBBox();
-  const initialScale = scale;
-  const initialX =
-    !isUpdate && !settings.didInitiate
-      ? (svgSize.width - groupSize.width * initialScale) / 2
-      : translateX;
-  const initialY =
-    !isUpdate && !settings.didInitiate
-      ? (svgSize.height + groupSize.height * initialScale) / 2
-      : translateY;
-  svg
+  const bBox = groupNode.getBBox();
+  state.graphSize.width = bBox.width;
+  state.graphSize.height = bBox.height;
+  if (!isUpdate && !settings.didInitiate) {
+    showAllAndCenterMap(state);
+  } else {
+    setZoom(state.x, state.y, state.scale, state);
+  }
+  svgGroup.attr("height", state.graphSize.height * state.scale + 40);
+};
+const showAllAndCenterMap = (state: IVizjsViewState) => {
+  if (!state.svg) {
+    return;
+  }
+  let positionInfo = state.svg.node()!.getBoundingClientRect();
+  const xScale = positionInfo.width / state.graphSize.width;
+  const yScale = positionInfo.height / state.graphSize.height;
+  const scale = Math.min(xScale, yScale);
+  console.log("positionInfo.height: " + positionInfo.height);
+  console.log("graphSize.height: " + state.graphSize.height);
+  console.log("y: " + (positionInfo.height - state.graphSize.height) / 2);
+  console.log("scale: " + scale);
+  const x = (positionInfo.width - state.graphSize.width * scale) / 2;
+  const scaledHeight = state.graphSize.height * scale;
+  const y = scaledHeight + ((positionInfo.height - scaledHeight) / 2);
+  setZoom(x, y, scale, state);
+};
+const setZoom = (
+  x: number,
+  y: number,
+  scale: number,
+  state: IVizjsViewState
+) => {
+  if (!state.svg || !state.zoom) {
+    return;
+  }
+  state.svg
     .transition()
     .duration(0)
     .call(
-      zoom.transform,
-      d3.zoomIdentity.translate(initialX, initialY).scale(initialScale)
+      state.zoom.transform,
+      // eslint-disable-next-line
+      d3.zoomIdentity.translate(x, y).scale(scale)
     );
-  svgGroup.attr("height", groupSize.height * initialScale + 40);
 };
 
 onceDocumentLoaded(() => {
-  loadSvg();
+  loadSvg("", state);
 });
-
-const onUpdateView = (() => {
-  const doScroll = throttle((line: number) => {
-    scrollDisabled = true;
-    scrollToRevealSourceLine(line);
-  }, 50);
-
-  return (line: number, settings: any) => {
-    if (!isNaN(line)) {
-      settings.line = line;
-      doScroll(line);
-    }
-  };
-})();
-
-window.addEventListener(
-  "resize",
-  () => {
-    scrollDisabled = true;
-  },
-  true
-);
 
 window.addEventListener(
   "message",
@@ -116,14 +133,8 @@ window.addEventListener(
     }
 
     switch (event.data.type) {
-      case "onDidChangeTextEditorSelection":
-        marker.onDidChangeTextEditorSelection(event.data.line);
-        break;
       case "onDidChangeTextDocument":
-        loadSvg(event.data.svg, true);
-        break;
-      case "updateView":
-        onUpdateView(event.data.line, settings);
+        loadSvg(event.data.svg, state, true);
         break;
     }
   },
@@ -144,12 +155,6 @@ document.addEventListener("dblclick", event => {
     if (node.tagName === "A") {
       return;
     }
-  }
-
-  const offset = event.pageY;
-  const line = getEditorLineNumberForPageOffset(offset);
-  if (typeof line === "number" && !isNaN(line)) {
-    messagePoster.postMessage("didClick", { line: Math.floor(line) });
   }
 });
 
@@ -211,19 +216,3 @@ document.addEventListener(
   },
   true
 );
-
-if (settings.scrollEditorWithPreview) {
-  window.addEventListener(
-    "scroll",
-    throttle(() => {
-      if (scrollDisabled) {
-        scrollDisabled = false;
-      } else {
-        const line = getEditorLineNumberForPageOffset(window.scrollY);
-        if (typeof line === "number" && !isNaN(line)) {
-          messagePoster.postMessage("revealLine", { line });
-        }
-      }
-    }, 50)
-  );
-}

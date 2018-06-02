@@ -49,7 +49,8 @@ export function activate(context: vscode.ExtensionContext) {
   const previewManager = new ArgdownPreviewManager(
     contentProvider,
     logger,
-    contributions
+    contributions,
+    argdownEngine
   );
   const previewSecuritySelector = new PreviewSecuritySelector(
     cspArbiter,

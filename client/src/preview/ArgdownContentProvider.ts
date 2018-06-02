@@ -1,8 +1,3 @@
-/*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
- *  Licensed under the MIT License. See License.txt in the project root for license information.
- *--------------------------------------------------------------------------------------------*/
-
 import * as vscode from "vscode";
 import * as path from "path";
 import { ArgdownEngine } from "./ArgdownEngine";
@@ -38,12 +33,14 @@ const previewStrings = {
 export interface IViewProvider {
   generateView(
     argdownEngine: ArgdownEngine,
-    argdownDocument: vscode.TextDocument
+    argdownDocument: vscode.TextDocument,
+    config: ArgdownPreviewConfiguration
   ): Promise<string>;
   generateSubMenu(): string;
   generateOnDidChangeTextDocumentMessage(
     argdownEngine: ArgdownEngine,
-    argdownDocument: vscode.TextDocument
+    argdownDocument: vscode.TextDocument,
+    config: ArgdownPreviewConfiguration
   ): Promise<any>;
   scripts: string[];
 }
@@ -52,9 +49,10 @@ const htmlViewProvider: IViewProvider = {
   scripts: ["htmlView.js"],
   generateView: async (
     argdownEngine: ArgdownEngine,
-    argdownDocument: vscode.TextDocument
+    argdownDocument: vscode.TextDocument,
+    config: ArgdownPreviewConfiguration
   ) => {
-    let html = await argdownEngine.exportHtml(argdownDocument.getText());
+    let html = await argdownEngine.exportHtml(argdownDocument, config);
     return `${html}<div class="has-line" data-line="${
       argdownDocument.lineCount
     }"></div>`;
@@ -66,9 +64,10 @@ const htmlViewProvider: IViewProvider = {
   },
   generateOnDidChangeTextDocumentMessage: async (
     argdownEngine: ArgdownEngine,
-    argdownDocument: vscode.TextDocument
+    argdownDocument: vscode.TextDocument,
+    config: ArgdownPreviewConfiguration
   ) => {
-    let html = await argdownEngine.exportHtml(argdownDocument.getText());
+    let html = await argdownEngine.exportHtml(argdownDocument, config);
     return {
       html: `${html}<div class="has-line" data-line="${
         argdownDocument.lineCount
@@ -80,9 +79,10 @@ const dagreViewProvider: IViewProvider = {
   scripts: ["dagreView.js"],
   generateView: async (
     argdownEngine: ArgdownEngine,
-    argdownDocument: vscode.TextDocument
+    argdownDocument: vscode.TextDocument,
+    config: ArgdownPreviewConfiguration
   ) => {
-    let json = await argdownEngine.exportJson(argdownDocument.getText());
+    let json = await argdownEngine.exportJson(argdownDocument, config);
     json = json.replace(/"/g, "&quot;");
     return `<div id="argdown-json-data" data-argdown="${json}"></div>
         <svg id="dagre-svg" ref="svg" width="100%" height="100%">
@@ -97,9 +97,10 @@ const dagreViewProvider: IViewProvider = {
   },
   generateOnDidChangeTextDocumentMessage: async (
     argdownEngine: ArgdownEngine,
-    argdownDocument: vscode.TextDocument
+    argdownDocument: vscode.TextDocument,
+    config: ArgdownPreviewConfiguration
   ) => {
-    const json = await argdownEngine.exportJson(argdownDocument.getText());
+    const json = await argdownEngine.exportJson(argdownDocument, config);
     return { json };
   }
 };
@@ -107,9 +108,10 @@ const vizjsViewProvider: IViewProvider = {
   scripts: ["vizjsView.js"],
   generateView: async (
     argdownEngine: ArgdownEngine,
-    argdownDocument: vscode.TextDocument
+    argdownDocument: vscode.TextDocument,
+    config: ArgdownPreviewConfiguration
   ) => {
-    const svg = await argdownEngine.exportVizjs(argdownDocument.getText());
+    const svg = await argdownEngine.exportVizjs(argdownDocument, config);
     return `<div id="svg-container">${svg}</div>`;
   },
   generateSubMenu: () => {
@@ -119,9 +121,10 @@ const vizjsViewProvider: IViewProvider = {
   },
   generateOnDidChangeTextDocumentMessage: async (
     argdownEngine: ArgdownEngine,
-    argdownDocument: vscode.TextDocument
+    argdownDocument: vscode.TextDocument,
+    config: ArgdownPreviewConfiguration
   ) => {
-    const svg = await argdownEngine.exportVizjs(argdownDocument.getText());
+    const svg = await argdownEngine.exportVizjs(argdownDocument, config);
     return { svg: svg };
   }
 };
@@ -145,12 +148,13 @@ export class ArgdownContentProvider {
     initialLine: number | undefined = undefined
   ): Promise<any> {
     const sourceUri = argdownDocument.uri;
-    const config = previewConfigurations.loadAndCacheConfiguration(sourceUri);
+    const config = previewConfigurations.getConfiguration(sourceUri);
     const viewProvider =
       this.viewProviders[config.view] || this.viewProviders[PreviewViews.HTML];
     return await viewProvider.generateOnDidChangeTextDocumentMessage(
       this.engine,
-      argdownDocument
+      argdownDocument,
+      config
     );
   }
 
@@ -161,7 +165,7 @@ export class ArgdownContentProvider {
     state: { [key: string]: any }
   ): Promise<string> {
     const sourceUri = argdownDocument.uri;
-    const config = previewConfigurations.loadAndCacheConfiguration(sourceUri);
+    const config = previewConfigurations.getConfiguration(sourceUri);
     const view = config.view;
     const viewProvider =
       this.viewProviders[view] || this.viewProviders[PreviewViews.HTML];
@@ -176,13 +180,24 @@ export class ArgdownContentProvider {
       disableSecurityWarnings: this.cspArbiter.shouldDisableSecurityWarnings(),
       ...viewStateStore
     };
+    if (view === PreviewViews.DAGRE) {
+      initialData.dagre = {
+        nodeSep: config.dagreNodeSep,
+        rankSep: config.dagreRankSep,
+        rankDir: config.dagreRankDir
+      };
+    }
 
     // Content Security Policy
     const nonce = new Date().getTime() + "" + new Date().getMilliseconds();
     const csp = this.getCspForResource(sourceUri, nonce);
     let viewHtml = "";
     try {
-      viewHtml = await viewProvider.generateView(this.engine, argdownDocument);
+      viewHtml = await viewProvider.generateView(
+        this.engine,
+        argdownDocument,
+        config
+      );
       viewHtml = `<div class="view ${view}-view">${viewHtml}</div>`;
     } catch (e) {
       this.logger.log("error from Argdown app: " + e.toString());

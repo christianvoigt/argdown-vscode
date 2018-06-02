@@ -1,39 +1,16 @@
-import { ActiveLineMarker } from "./activeLineMarker";
 import { onceDocumentLoaded } from "./events";
 import { createPosterForVsCode } from "./messaging";
-import {
-  getEditorLineNumberForPageOffset,
-  scrollToRevealSourceLine
-} from "./scroll-sync";
-import { getSettings } from "./settings";
+import { IPreviewSettings, getSettings } from "./settings";
 import throttle = require("lodash.throttle");
 import { initMenu } from "./menu";
 import * as dagreD3 from "dagre-d3";
 import * as d3 from "d3";
 import { getSvgForExport, getPngAsString } from "./export";
 import { openScaleDialog } from "./scaleDialog";
-
 declare function require(path: string): string;
 const dagreCss = require("!raw-loader!./dagre.css");
-const dagreCssHtml = '<style type="text/css">' + dagreCss + "</style>";
 
 declare var acquireVsCodeApi: any;
-
-var scrollDisabled = true;
-const marker = new ActiveLineMarker();
-const settings = getSettings();
-
-let scale = settings.hasOwnProperty("scale") ? settings.scale! : 0.75;
-let translateX = settings.hasOwnProperty("x") ? settings.x! : 0;
-let translateY = settings.hasOwnProperty("y") ? settings.y! : 0;
-const sendDidChangeZoom = throttle(() => {
-  messagePoster.postMessage("didChangeZoom", {
-    scale: scale,
-    x: translateX,
-    y: translateY
-  });
-}, 50);
-
 const vscode = acquireVsCodeApi();
 vscode.postMessage({});
 
@@ -42,13 +19,38 @@ initMenu(messagePoster);
 
 window.cspAlerter.setPoster(messagePoster);
 window.styleLoadingMonitor.setPoster(messagePoster);
-const rankDir: string = "BT";
-const rankSep: number = 50;
-const nodeSep: number = 70;
 
+interface IDagreViewState {
+  scale: number;
+  x: number;
+  y: number;
+  zoom?: d3.ZoomBehavior<SVGSVGElement, null>;
+  svg?: d3.Selection<SVGSVGElement, null, HTMLElement, any>;
+  graphSize: { width: number; height: number };
+  settings: IPreviewSettings;
+  dagreCssHtml: string;
+}
+
+const settings = getSettings();
+const state: IDagreViewState = {
+  scale: settings.hasOwnProperty("scale") ? settings.scale! : 0.75,
+  x: settings.hasOwnProperty("x") ? settings.x! : 0,
+  y: settings.hasOwnProperty("y") ? settings.y! : 0,
+  graphSize: { width: 0, height: 0 },
+  settings: settings,
+  dagreCssHtml: '<style type="text/css">' + dagreCss + "</style>"
+};
 const getSvgEl = () => {
   return <SVGSVGElement>(<any>document.getElementById("dagre-svg")!);
 };
+
+const sendDidChangeZoom = throttle((state: IDagreViewState) => {
+  messagePoster.postMessage("didChangeZoom", {
+    scale: state.scale,
+    x: state.x,
+    y: state.y
+  });
+}, 50);
 
 const addNode = (
   node: any,
@@ -101,7 +103,11 @@ const addNode = (
   }
 };
 
-const generateSvg = (argdownData: any, isUpdate: boolean = false): void => {
+const generateSvg = (
+  argdownData: any,
+  state: IDagreViewState,
+  isUpdate: boolean = false
+): void => {
   const map = argdownData.map;
   const tagsDictionary = argdownData.tagsDictionary;
   // Create the input graph
@@ -109,9 +115,9 @@ const generateSvg = (argdownData: any, isUpdate: boolean = false): void => {
     compound: true
   })
     .setGraph({
-      rankdir: rankDir,
-      ranksep: rankSep,
-      nodesep: nodeSep,
+      rankdir: settings.dagre.rankDir,
+      ranksep: settings.dagre.rankSep,
+      nodesep: settings.dagre.nodeSep,
       marginx: 20,
       marginy: 20
     })
@@ -141,46 +147,65 @@ const generateSvg = (argdownData: any, isUpdate: boolean = false): void => {
   // const layout = dagreD3.layout().rankSep(50).rankDir('BT')
 
   // Set up an SVG group so that we can translate the final graph.
-  const svg = d3.select<SVGSVGElement, null>("#dagre-svg");
-  svg.selectAll("*").remove();
+  state.svg = d3.select<SVGSVGElement, null>("#dagre-svg");
+  state.svg.selectAll("*").remove();
 
-  svg.append("g");
-  const svgGroup = svg.select<SVGGraphicsElement>("g");
+  state.svg.append("g");
+  const svgGroup = state.svg.select<SVGGraphicsElement>("g");
   svgGroup.attr("class", "dagre");
 
-  var zoom = d3.zoom<SVGSVGElement, null>().on("zoom", function() {
+  state.zoom = d3.zoom<SVGSVGElement, null>().on("zoom", function() {
     // eslint-disable-next-line
     svgGroup.attr("transform", d3.event.transform);
-    scale = d3.event.transform.k;
-    translateX = d3.event.transform.x;
-    translateY = d3.event.transform.y;
-    sendDidChangeZoom();
+    state.scale = d3.event.transform.k;
+    state.x = d3.event.transform.x;
+    state.y = d3.event.transform.y;
+    sendDidChangeZoom(state);
   });
-  svg.call(zoom);
+  state.svg.call(state.zoom);
 
   // Run the renderer. This is what draws the final graph.
   render(svgGroup as any, g);
-  // renderer.layout(layout).run(svgGroup, g)
-  // Center the graph
-  let getSvgWidth = function() {
-    let positionInfo = svg.node()!.getBoundingClientRect();
-    return positionInfo.width;
-  };
-  const initialScale = scale;
-  const initialX =
-    !isUpdate && !settings.didInitiate
-      ? (getSvgWidth() - g.graph().width * initialScale) / 2
-      : translateX;
-  const initialY = !isUpdate && !settings.didInitiate ? 20 : translateY;
-  svg
+  state.graphSize.width = g.graph().width;
+  state.graphSize.height = g.graph().height;
+
+  if (!isUpdate && !settings.didInitiate) {
+    showAllAndCenterMap(state);
+  } else {
+    setZoom(state.x, state.y, state.scale, state);
+  }
+  svgGroup.attr("height", state.graphSize.width * state.scale + 40);
+};
+
+const showAllAndCenterMap = (state: IDagreViewState) => {
+  if (!state.svg) {
+    return;
+  }
+  let positionInfo = state.svg.node()!.getBoundingClientRect();
+  const xScale = positionInfo.width / state.graphSize.width;
+  const yScale = positionInfo.height / state.graphSize.height;
+  const scale = Math.min(xScale, yScale);
+  const x = (positionInfo.width - state.graphSize.width * scale) / 2;
+  const y = (positionInfo.height - state.graphSize.height * scale) / 2;
+  setZoom(x, y, scale, state);
+};
+const setZoom = (
+  x: number,
+  y: number,
+  scale: number,
+  state: IDagreViewState
+) => {
+  if (!state.svg || !state.zoom) {
+    return;
+  }
+  state.svg
     .transition()
     .duration(0)
     .call(
-      zoom.transform,
+      state.zoom.transform,
       // eslint-disable-next-line
-      d3.zoomIdentity.translate(initialX, initialY).scale(initialScale)
+      d3.zoomIdentity.translate(x, y).scale(scale)
     );
-  svgGroup.attr("height", g.graph().height * initialScale + 40);
 };
 
 onceDocumentLoaded(() => {
@@ -189,49 +214,20 @@ onceDocumentLoaded(() => {
     return;
   }
   const argdownData = JSON.parse(argdownDataEl.dataset.argdown!);
-  generateSvg(argdownData);
+  generateSvg(argdownData, state);
 });
-
-const onUpdateView = (() => {
-  const doScroll = throttle((line: number) => {
-    scrollDisabled = true;
-    scrollToRevealSourceLine(line);
-  }, 50);
-
-  return (line: number, settings: any) => {
-    if (!isNaN(line)) {
-      settings.line = line;
-      doScroll(line);
-    }
-  };
-})();
-
-window.addEventListener(
-  "resize",
-  () => {
-    scrollDisabled = true;
-  },
-  true
-);
 
 window.addEventListener(
   "message",
   event => {
-    if (event.data.source !== settings.source) {
+    if (event.data.source !== state.settings.source) {
       return;
     }
 
     switch (event.data.type) {
       case "onDidChangeTextDocument":
         const argdownData = JSON.parse(event.data.json);
-        generateSvg(argdownData, true);
-        break;
-      case "onDidChangeTextEditorSelection":
-        marker.onDidChangeTextEditorSelection(event.data.line);
-        break;
-
-      case "updateView":
-        onUpdateView(event.data.line, settings);
+        generateSvg(argdownData, state, true);
         break;
     }
   },
@@ -239,7 +235,7 @@ window.addEventListener(
 );
 
 document.addEventListener("dblclick", event => {
-  if (!settings.doubleClickToSwitchToEditor) {
+  if (!state.settings.doubleClickToSwitchToEditor) {
     return;
   }
 
@@ -252,12 +248,6 @@ document.addEventListener("dblclick", event => {
     if (node.tagName === "A") {
       return;
     }
-  }
-
-  const offset = event.pageY;
-  const line = getEditorLineNumberForPageOffset(offset);
-  if (typeof line === "number" && !isNaN(line)) {
-    messagePoster.postMessage("didClick", { line: Math.floor(line) });
   }
 });
 
@@ -274,20 +264,31 @@ document.addEventListener(
         if (node.dataset.command) {
           const command = node.dataset.command;
           if (command === "argdown.exportContentToDagreSvg") {
-            var svgString = getSvgForExport(getSvgEl(), dagreCssHtml);
-            messagePoster.postCommand(command, [settings.source, svgString]);
+            var svgString = getSvgForExport(getSvgEl(), state.dagreCssHtml);
+            messagePoster.postCommand(command, [
+              state.settings.source,
+              svgString
+            ]);
           } else if (command === "argdown.exportContentToDagrePng") {
             openScaleDialog(scale => {
-              getPngAsString(getSvgEl(), scale, dagreCssHtml, pngString => {
-                messagePoster.postCommand(command, [
-                  settings.source,
-                  pngString
-                ]);
-              });
+              getPngAsString(
+                getSvgEl(),
+                scale,
+                state.dagreCssHtml,
+                pngString => {
+                  messagePoster.postCommand(command, [
+                    state.settings.source,
+                    pngString
+                  ]);
+                }
+              );
             });
           } else if (command === "argdown.exportContentToDagrePdf") {
-            var svgString = getSvgForExport(getSvgEl(), dagreCssHtml);
-            messagePoster.postCommand(command, [settings.source, svgString]);
+            var svgString = getSvgForExport(getSvgEl(), state.dagreCssHtml);
+            messagePoster.postCommand(command, [
+              state.settings.source,
+              svgString
+            ]);
           }
           break;
         }
@@ -315,19 +316,3 @@ document.addEventListener(
   },
   true
 );
-
-if (settings.scrollEditorWithPreview) {
-  window.addEventListener(
-    "scroll",
-    throttle(() => {
-      if (scrollDisabled) {
-        scrollDisabled = false;
-      } else {
-        const line = getEditorLineNumberForPageOffset(window.scrollY);
-        if (typeof line === "number" && !isNaN(line)) {
-          messagePoster.postMessage("revealLine", { line });
-        }
-      }
-    }, 50)
-  );
-}

@@ -1,8 +1,12 @@
 import * as vscode from "vscode";
+import { ArgdownEngine } from "./ArgdownEngine";
 
 export class ArgdownPreviewConfiguration {
-  public static getForResource(resource: vscode.Uri) {
-    return new ArgdownPreviewConfiguration(resource);
+  public static getForResource(
+    resource: vscode.Uri,
+    argdownEngine: ArgdownEngine
+  ) {
+    return new ArgdownPreviewConfiguration(resource, argdownEngine);
   }
 
   public readonly scrollBeyondLastLine: boolean;
@@ -15,10 +19,15 @@ export class ArgdownPreviewConfiguration {
   public readonly fontSize: number;
   public readonly fontFamily: string | undefined;
   public readonly lockMenu: boolean;
+  public readonly dagreRankSep: number;
+  public readonly dagreNodeSep: number;
+  public readonly dagreRankDir: string;
   public readonly view: string;
   public readonly styles: string[];
+  public readonly argdownConfigFile?: string;
+  public readonly argdownConfig: any;
 
-  private constructor(resource: vscode.Uri) {
+  private constructor(resource: vscode.Uri, argdownEngine: ArgdownEngine) {
     const editorConfig = vscode.workspace.getConfiguration("editor", resource);
     const argdownConfig = vscode.workspace.getConfiguration(
       "argdown",
@@ -47,6 +56,18 @@ export class ArgdownPreviewConfiguration {
     );
     this.lockMenu = !!argdownConfig.get<boolean>("preview.lockMenu", true);
     this.view = argdownConfig.get<string>("preview.view", "html");
+    this.dagreRankSep = argdownConfig.get<number>("preview.dagre.rankSep", 50);
+    this.dagreNodeSep = argdownConfig.get<number>("preview.dagre.nodeSep", 70);
+    this.dagreRankDir = argdownConfig.get<string>(
+      "preview.dagre.rankDir",
+      "BT"
+    );
+    this.argdownConfigFile = argdownConfig.get<string | undefined>(
+      "configFile",
+      undefined
+    );
+    this.argdownConfig =
+      argdownEngine.loadConfig(this.argdownConfigFile, resource) || {};
 
     this.fontFamily = argdownConfig.get<string | undefined>(
       "preview.fontFamily",
@@ -66,7 +87,11 @@ export class ArgdownPreviewConfiguration {
 
   public isEqualTo(otherConfig: ArgdownPreviewConfiguration) {
     for (let key in this) {
-      if (this.hasOwnProperty(key) && key !== "styles") {
+      if (
+        this.hasOwnProperty(key) &&
+        key !== "styles" &&
+        key !== "argdownConfig"
+      ) {
         if (this[key] !== otherConfig[key]) {
           return false;
         }
@@ -95,10 +120,23 @@ export class ArgdownPreviewConfigurationManager {
     ArgdownPreviewConfiguration
   >();
 
+  public constructor(private _argdownEngine: ArgdownEngine) {}
+  public getConfiguration(resource: vscode.Uri): ArgdownPreviewConfiguration {
+    const config = this.previewConfigurationsForWorkspaces.get(
+      this.getKey(resource)
+	);
+	if(!config){
+		return this.loadAndCacheConfiguration(resource);
+	}
+	return config;
+  }
   public loadAndCacheConfiguration(
     resource: vscode.Uri
   ): ArgdownPreviewConfiguration {
-    const config = ArgdownPreviewConfiguration.getForResource(resource);
+    const config = ArgdownPreviewConfiguration.getForResource(
+      resource,
+      this._argdownEngine
+    );
     this.previewConfigurationsForWorkspaces.set(this.getKey(resource), config);
     return config;
   }
@@ -106,7 +144,10 @@ export class ArgdownPreviewConfigurationManager {
   public hasConfigurationChanged(resource: vscode.Uri): boolean {
     const key = this.getKey(resource);
     const currentConfig = this.previewConfigurationsForWorkspaces.get(key);
-    const newConfig = ArgdownPreviewConfiguration.getForResource(resource);
+    const newConfig = ArgdownPreviewConfiguration.getForResource(
+      resource,
+      this._argdownEngine
+    );
     return !currentConfig || !currentConfig.isEqualTo(newConfig);
   }
 

@@ -426,9 +426,7 @@ export class ArgdownPreview {
       this.line,
       this._stateStore
     );
-    const config = this._previewConfigurations.loadAndCacheConfiguration(
-      this._resource
-    );
+    const config = this._previewConfigurations.getConfiguration(this._resource);
     this._stateStore[config.view] = this._stateStore[config.view] || {};
     this._stateStore[config.view].didInitiate = true;
     if (this._resource === resource) {
@@ -512,7 +510,7 @@ export class ArgdownPreview {
       .update("preview.lockMenu", lockMenu, true);
   }
   private onDidChangeZoom(x: number, y: number, scale: number) {
-    const config = this._previewConfigurations.loadAndCacheConfiguration(
+    const config = this._previewConfigurations.getConfiguration(
       this._resource
     );
     if (config.view === PreviewViews.DAGRE) {
