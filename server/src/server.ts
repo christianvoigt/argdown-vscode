@@ -1,17 +1,21 @@
 "use strict";
 import * as path from "path";
 import {
+  CompletionItem,
   createConnection,
   TextDocuments,
   TextDocument,
   TextDocumentPositionParams,
   Diagnostic,
   DiagnosticSeverity,
+  DocumentHighlight,
   Range,
   InitializeParams,
   InitializeResult,
+  Location,
   ProposedFeatures,
   Proposed,
+  ReferenceParams,
   SymbolInformation,
   WorkspaceSymbolParams
 } from "vscode-languageserver";
@@ -24,10 +28,8 @@ import {
   ExportDocumentArgs
 } from "./commands/Export";
 import { documentSymbolsPlugin } from "./DocumentSymbolsPlugin";
-import * as fs from "fs";
-import { promisify } from "util";
-import { findDefinitions } from "./SymbolQuery";
-const readFile = promisify(fs.readFile);
+import * as lineColumn from "line-column";
+import { findDefinitions, findReferences } from "./SymbolQuery";
 
 const EXPORT_CONTENT_COMMAND = "argdown.server.exportContent";
 const EXPORT_DOCUMENT_COMMAND = "argdown.server.exportDocument";
@@ -89,6 +91,11 @@ connection.onInitialize(
         documentSymbolProvider: true,
         workspaceSymbolProvider: true,
         definitionProvider: true,
+        referencesProvider: true,
+        documentHighlightProvider: true,
+        completionProvider: {
+          triggerCharacters: ["[", "<"]
+        },
         executeCommandProvider: {
           commands: [
             EXPORT_DOCUMENT_COMMAND,
@@ -294,34 +301,98 @@ connection.onDidCloseTextDocument((params) => {
 	connection.console.log(`${params.textDocument.uri} closed.`);
 });
 */
-
-connection.onDefinition(async (params: TextDocumentPositionParams) => {
+connection.onCompletion(async (params: TextDocumentPositionParams) => {
   const { textDocument, position } = params;
   const path = Uri.parse(textDocument.uri).fsPath;
+  const doc = documents.get(textDocument.uri);
+  const input = doc.getText();
   const request = {
+    input: input,
+    inputPath: path,
+    process: ["preprocessor", "parse-input", "build-model"]
+  };
+  const response = await argdownEngine.runAsync(request);
+  const finder = lineColumn(input);
+  const offset = finder.toIndex(position.line + 1, position.character);
+  const left = input.charAt(offset);
+  if (left === "[") {
+    return Object.keys(response.statements).map((k: any) => {
+      const eqClass = response.statements[k];
+      const title = eqClass.title;
+      const item = CompletionItem.create(`[${title}]`);
+      item.insertText = title;
+      item.detail = eqClass.getCanonicalText();
+      return item;
+    });
+  } else if (left === "<") {
+    return Object.keys(response.arguments).map((k: any) => {
+      const argument = response.arguments[k];
+      const title = argument.title;
+      const item = CompletionItem.create(`<${title}>`);
+      item.insertText = title;
+      const desc = argument.getCanonicalDescription();
+      if (desc) {
+        item.detail = desc.text;
+      }
+      return item;
+    });
+  }
+  return [];
+});
+connection.onDocumentHighlight(async (params: TextDocumentPositionParams) => {
+  const { textDocument, position } = params;
+  const doc = documents.get(textDocument.uri);
+  const request = {
+    input: doc.getText(),
+    inputPath: path,
+    process: ["preprocessor", "parse-input", "build-model"]
+  };
+  const response = await argdownEngine.runAsync(request);
+  return findReferences(response, textDocument.uri, position).map(
+    (l: Location) => DocumentHighlight.create(l.range, 1)
+  );
+});
+connection.onReferences(async (params: ReferenceParams) => {
+  const { context, position, textDocument } = params;
+  const path = Uri.parse(textDocument.uri).fsPath;
+  const doc = documents.get(textDocument.uri);
+  const request = {
+    input: doc.getText(),
     inputPath: path,
     process: ["preprocessor", "parse-input", "build-model"],
     logLevel: "verbose"
   };
-  const responses = await argdownEngine.load(request);
-  return findDefinitions(responses[0], textDocument.uri, position, connection);
+  const response = await argdownEngine.runAsync(request);
+  return findReferences(response, textDocument.uri, position, context);
+});
+
+connection.onDefinition(async (params: TextDocumentPositionParams) => {
+  const { textDocument, position } = params;
+  const path = Uri.parse(textDocument.uri).fsPath;
+  const doc = documents.get(textDocument.uri);
+  const request = {
+    input: doc.getText(),
+    inputPath: path,
+    process: ["preprocessor", "parse-input", "build-model"]
+  };
+  const response = await argdownEngine.runAsync(request);
+  return findDefinitions(response, textDocument.uri, position);
 });
 
 argdownEngine.addPlugin(documentSymbolsPlugin, "add-document-symbols");
 
 connection.onDocumentSymbol(async (params: TextDocumentPositionParams) => {
   const path = Uri.parse(params.textDocument.uri).fsPath;
-  const input = await readFile(path);
+  const doc = documents.get(params.textDocument.uri);
   const request = {
     inputPath: path,
-    input: input.toString(),
+    input: doc.getText(),
     process: [
       "preprocessor",
       "parse-input",
       "build-model",
       "add-document-symbols"
     ],
-    logLevel: "verbose",
     inputUri: params.textDocument.uri
   };
   const response = await argdownEngine.runAsync(request);
@@ -340,19 +411,14 @@ connection.onWorkspaceSymbol(async (params: WorkspaceSymbolParams) => {
         "parse-input",
         "build-model",
         "add-document-symbols"
-      ],
-      logLevel: "verbose"
+      ]
     };
     const responses: any[] = await argdownEngine.load(request);
-    connection.console.log("responses: " + responses.length);
     const folderSymbols = responses
       .map<SymbolInformation[]>(r => <SymbolInformation[]>r.documentSymbols)
       .reduce((acc, val) => acc.concat(val), []);
-    connection.console.log("folderSymbols: " + folderSymbols.length);
     workspaceSymbols.push(...folderSymbols);
   }
-  connection.console.log("workspaceSymbols: " + workspaceSymbols.length);
-  connection.console.log(JSON.stringify(workspaceSymbols));
   return workspaceSymbols.filter(s => s && s.name.indexOf(query) !== -1);
 });
 connection.onExecuteCommand(async params => {

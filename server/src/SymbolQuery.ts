@@ -1,25 +1,110 @@
-import { Location, Position, Range } from "vscode-languageserver";
-export const findDefinitions = (
+import {
+  Location,
+  Position,
+  Range,
+  ReferenceContext
+} from "vscode-languageserver";
+const walkTree = (
+  node: any,
+  parentNode: any,
+  childIndex: number,
+  callback: (node: any, parentNode: any, childIndex: number) => void
+) => {
+  callback(node, parentNode, childIndex);
+  if (node.children && node.children.length > 0) {
+    for (var i = 0; i < node.children.length; i++) {
+      let child = node.children[i];
+      walkTree(child, node, i, callback);
+    }
+  }
+};
+export const findReferences = (
   response: any,
   uri: string,
   position: Position,
-  connection: any
+  context?: ReferenceContext
 ): Location[] => {
   const line = position.line + 1;
   const character = position.character + 1;
   const nodes: any[] = findNodesContainingPosition(
     response.ast.children,
     line,
-    character,
-    connection
+    character
   );
-  connection.console.log("nodes: " + nodes.length);
   nodes.map(n => {
-    if (n.tokenType) {
-      connection.console.log("Node: " + n.tokenType.tokenName);
-    } else {
-      connection.console.log("Node: " + n.name);
+    return n;
+  });
+  const nodeAtPosition = nodes.reverse().find(n => {
+    if (!n.tokenType) {
+      return false;
     }
+    switch (n.tokenType.tokenName) {
+      case "StatementReference":
+      case "StatementDefinition":
+      case "StatementMention":
+      case "ArgumentReference":
+      case "ArgumentDefinition":
+      case "ArgumentMention":
+        return true;
+    }
+    return false;
+  });
+  if (nodeAtPosition) {
+    const references = <Location[]>[];
+    const isStatement = nodeAtPosition.tokenType.tokenName.startsWith(
+      "Statement"
+    );
+    const isArgument = nodeAtPosition.tokenType.tokenName.startsWith(
+      "Argument"
+    );
+    const tokenStart = isStatement ? "Statement" : "Argument";
+    const includeDeclaration = context ? context.includeDeclaration : true;
+    let title = nodeAtPosition.title;
+    if (!title && nodeAtPosition.argument) {
+      title = nodeAtPosition.argument.title;
+    }
+    if (!title && nodeAtPosition.statement) {
+      title = nodeAtPosition.statement.title;
+    }
+    walkTree(response.ast, null, 0, (node: any) => {
+      if (
+        node.tokenType &&
+        node.tokenType.tokenName.startsWith(tokenStart) &&
+        node.title === title
+      ) {
+        if (
+          includeDeclaration ||
+          !node.tokenType.tokenName.endsWith("Definition")
+        ) {
+          references.push(createLocation(uri, node));
+        }
+      }
+      if (
+        isArgument &&
+        node.name === "argument" &&
+        node.argument.title === title &&
+        includeDeclaration
+      ) {
+        references.push(createLocation(uri, node));
+      }
+    });
+    return references;
+  }
+  return [];
+};
+export const findDefinitions = (
+  response: any,
+  uri: string,
+  position: Position
+): Location[] => {
+  const line = position.line + 1;
+  const character = position.character + 1;
+  const nodes: any[] = findNodesContainingPosition(
+    response.ast.children,
+    line,
+    character
+  );
+  nodes.map(n => {
     return n;
   });
   const node = nodes.reverse().find(n => {
@@ -37,34 +122,39 @@ export const findDefinitions = (
     }
     return false;
   });
-  connection.console.log("node: " + JSON.stringify(node));
   if (node) {
     if (node.tokenType.tokenName.startsWith("Statement")) {
       // collect locations of all equivalenceClass members
       const equivalenceClass = response.statements[node.title];
       const definitions: Location[] = equivalenceClass.members.map((m: any) => {
-        const range = createRange(m);
-        return Location.create(uri, range);
+        return createLocation(uri, m);
       });
       return definitions;
     } else if (node.tokenType.tokenName.startsWith("Argument")) {
       // collect locations of pcs and all descriptions
       const argument = response.arguments[node.title];
       const definitions: Location[] = argument.descriptions.map((d: any) => {
-        connection.console.log("Description: " + JSON.stringify(d));
-        const range = createRange(d);
-        return Location.create(uri, range);
+        return createLocation(uri, d);
       });
       if (argument.pcs && argument.pcs.length > 0) {
-        connection.console.log("Argument: " + JSON.stringify(argument));
-        const range = createRange(argument);
-        const pcsLocation: Location = Location.create(uri, range);
+        const pcsLocation: Location = createLocation(uri, argument);
         definitions.push(pcsLocation);
       }
       return definitions;
     }
   }
   return [];
+};
+export const createLocation = (
+  uri: string,
+  el: {
+    startLine: number;
+    endLine: number;
+    startColumn: number;
+    endColumn: number;
+  }
+): Location => {
+  return Location.create(uri, createRange(el));
 };
 export const createRange = (el: {
   startLine: number;
@@ -82,8 +172,7 @@ export const createRange = (el: {
 export const findNodesContainingPosition = (
   nodes: any[],
   line: number,
-  character: number,
-  connection: any
+  character: number
 ): any[] => {
   let result = [];
   const closestNode = nodes
@@ -124,12 +213,7 @@ export const findNodesContainingPosition = (
     result.push(closestNode);
     if (closestNode.children && closestNode.children.length > 0) {
       result.push(
-        ...findNodesContainingPosition(
-          closestNode.children,
-          line,
-          character,
-          connection
-        )
+        ...findNodesContainingPosition(closestNode.children, line, character)
       );
     }
   }
