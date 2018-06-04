@@ -1,3 +1,10 @@
+/**
+ * Returns an array with all nested nodes containing a position, beginning at the outermost and ending at the innermost.
+ *
+ * @param response The response from the argdownEngine containing an AST
+ * @param line the position's line (one-based). This is one-based so if coming from VS Code, add 1.
+ * @param character the position's character. This is one-based so if coming from VS Code, add 1.
+ */
 export const findNodesContainingPosition = (
   nodes: any[],
   line: number,
@@ -6,6 +13,7 @@ export const findNodesContainingPosition = (
   let result = [];
   const closestNode = nodes
     .filter((n: any) => {
+      // Indent and Dedent are pseudo tokens that mess up the search because of their location information
       return (
         !n.tokenType ||
         (n.tokenType.tokenName !== "Indent" &&

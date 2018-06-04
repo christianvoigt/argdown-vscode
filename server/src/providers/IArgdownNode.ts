@@ -9,4 +9,5 @@ export interface IArgdownNode {
   argument?: any;
   statement?: any;
   children?: IArgdownNode[];
+  tag?: string;
 }

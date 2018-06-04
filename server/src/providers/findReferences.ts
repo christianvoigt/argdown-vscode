@@ -1,70 +1,56 @@
-import { findNodesContainingPosition } from "./findNodesContainingPosition";
 import { IArgdownNode } from "./IArgdownNode";
-const walkTree = (
-  node: IArgdownNode,
-  parentNode: any,
-  childIndex: number,
-  callback: (node: any, parentNode: any, childIndex: number) => void
-) => {
-  callback(node, parentNode, childIndex);
-  if (node.children && node.children.length > 0) {
-    for (var i = 0; i < node.children.length; i++) {
-      let child = node.children[i];
-      walkTree(child, node, i, callback);
-    }
-  }
-};
+import { walkTree } from "./utils";
+/**
+ * Finds all references in an Argdown AST to statements, arguments and tags.
+ * For statements and arguments this includes definitions, references and mentions.
+ **/
 export const findReferences = (
   response: any,
-  line: number,
-  character: number,
+  nodeAtPosition: IArgdownNode,
   includeDeclaration: boolean
 ): IArgdownNode[] => {
   const references = <IArgdownNode[]>[];
-  const containingNodes: any[] = findNodesContainingPosition(
-    response.ast.children,
-    line,
-    character
-  );
-  const nodeAtPosition = containingNodes.reverse().find(n => {
-    if (!n.tokenType) {
-      return false;
-    }
-    switch (n.tokenType.tokenName) {
-      case "StatementReference":
-      case "StatementDefinition":
-      case "StatementMention":
-      case "ArgumentReference":
-      case "ArgumentDefinition":
-      case "ArgumentMention":
-        return true;
-    }
-    return false;
-  });
   if (nodeAtPosition) {
-    const isStatement = nodeAtPosition.tokenType.tokenName.startsWith(
+    const refersToStatement = nodeAtPosition.tokenType.tokenName.startsWith(
       "Statement"
     );
+    const refersToArgument = nodeAtPosition.tokenType.tokenName.startsWith(
+      "Argument"
+    );
+    const refersToTag = nodeAtPosition.tokenType.tokenName === "Tag";
     // const isArgument = nodeAtPosition.tokenType.tokenName.startsWith(
     //   "Argument"
     // );
-    const tokenStart = isStatement ? "Statement" : "Argument";
-    let title = nodeAtPosition.title;
-    if (!title && nodeAtPosition.argument) {
-      title = nodeAtPosition.argument.title;
-    }
-    if (!title && nodeAtPosition.statement) {
-      title = nodeAtPosition.statement.title;
+    let tokenStart: string;
+    let nodeId: string;
+    if (refersToStatement) {
+      nodeId = nodeAtPosition.title;
+      tokenStart = "Statement";
+      if (!nodeId && nodeAtPosition.statement) {
+        nodeId = nodeAtPosition.statement.title;
+      }
+    } else if (refersToArgument) {
+      nodeId = nodeAtPosition.title;
+      tokenStart = "Argument";
+      if (!nodeId && nodeAtPosition.argument) {
+        nodeId = nodeAtPosition.argument.title;
+      }
+    } else if (refersToTag) {
+      tokenStart = "Tag";
+      nodeId = nodeAtPosition.tag;
     }
     walkTree(response.ast, null, 0, (node: IArgdownNode) => {
-      if (
-        node.tokenType &&
-        node.tokenType.tokenName.startsWith(tokenStart) &&
-        node.title === title
-      ) {
+      if (node.tokenType && node.tokenType.tokenName.startsWith(tokenStart)) {
+        let matches = false;
+        if (refersToArgument || refersToStatement) {
+          matches = node.title === nodeId;
+        } else if (refersToTag) {
+          matches = node.tag === nodeId;
+        }
         if (
-          includeDeclaration ||
-          !node.tokenType.tokenName.endsWith("Definition")
+          matches &&
+          (includeDeclaration ||
+            !node.tokenType.tokenName.endsWith("Definition"))
         ) {
           references.push(node);
         }

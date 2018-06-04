@@ -88,3 +88,17 @@ const getRelationSymbol = (
   }
   return symbol;
 };
+export const walkTree = (
+  node: IArgdownNode,
+  parentNode: any,
+  childIndex: number,
+  callback: (node: any, parentNode: any, childIndex: number) => void
+) => {
+  callback(node, parentNode, childIndex);
+  if (node.children && node.children.length > 0) {
+    for (var i = 0; i < node.children.length; i++) {
+      let child = node.children[i];
+      walkTree(child, node, i, callback);
+    }
+  }
+};

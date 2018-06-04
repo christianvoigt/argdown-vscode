@@ -102,7 +102,7 @@ connection.onInitialize(
         hoverProvider: true,
         renameProvider: true,
         completionProvider: {
-          triggerCharacters: ["[", "<", ":"]
+          triggerCharacters: ["[", "<", ":", "#"]
         },
         executeCommandProvider: {
           commands: [
@@ -327,7 +327,7 @@ connection.onRenameRequest(async (params: RenameParams) => {
   const { newName, position, textDocument } = params;
   const doc = documents.get(textDocument.uri);
   const response = await processDocForProviders(doc);
-  return provideRenameWorkspaceEdit(response, newName, position, textDocument, connection);
+  return provideRenameWorkspaceEdit(response, newName, position, textDocument);
 });
 connection.onHover(async (params: TextDocumentPositionParams) => {
   const { textDocument, position } = params;
@@ -356,13 +356,7 @@ connection.onCompletion(async (params: TextDocumentPositionParams) => {
       input = txt.substr(0, offset - 1) + txtAfter;
     }
   }
-  const request = {
-    input,
-    inputPath: path,
-    process: ["preprocessor", "parse-input", "build-model"],
-    logLevel: "verbose"
-  };
-  const response = await argdownEngine.runAsync(request);
+  const response = await processTextForProviders(input, path);
   return provideCompletion(response, char, position, txt, offset);
 });
 connection.onDocumentHighlight(async (params: TextDocumentPositionParams) => {

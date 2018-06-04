@@ -75,6 +75,13 @@ export const provideCompletion = (
         }
       }
     }
+  } else if (char === "#" && response.tagsDictionary) {
+    return Object.keys(response.tagsDictionary).map((t: any) => {
+      const item = CompletionItem.create(`#(${t})`);
+      item.insertText = `(${t})`;
+      item.kind = CompletionItemKind.Keyword;
+      return item;
+    });
   }
   return [];
 };

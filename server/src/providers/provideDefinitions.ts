@@ -1,6 +1,7 @@
 import { Location, Position } from "vscode-languageserver";
-import { findNodesContainingPosition } from "./findNodesContainingPosition";
+import { findNodeAtPosition } from "./findNodeAtPosition";
 import { createLocation } from "./utils";
+import { findReferences } from "./findReferences";
 
 export const provideDefinitions = (
   response: any,
@@ -9,40 +10,19 @@ export const provideDefinitions = (
 ): Location[] => {
   const line = position.line + 1;
   const character = position.character + 1;
-  const nodes: any[] = findNodesContainingPosition(
-    response.ast.children,
-    line,
-    character
-  );
-  nodes.map(n => {
-    return n;
-  });
-  const node = nodes.reverse().find(n => {
-    if (!n.tokenType) {
-      return false;
-    }
-    switch (n.tokenType.tokenName) {
-      case "StatementReference":
-      case "StatementDefinition":
-      case "StatementMention":
-      case "ArgumentReference":
-      case "ArgumentDefinition":
-      case "ArgumentMention":
-        return true;
-    }
-    return false;
-  });
-  if (node) {
-    if (node.tokenType.tokenName.startsWith("Statement")) {
+  const nodeAtPosition = findNodeAtPosition(response, line, character);
+  if (nodeAtPosition) {
+    const tokenName = nodeAtPosition.tokenType.tokenName;
+    if (tokenName.startsWith("Statement")) {
       // collect locations of all equivalenceClass members
-      const equivalenceClass = response.statements[node.title];
+      const equivalenceClass = response.statements[nodeAtPosition.title];
       const definitions: Location[] = equivalenceClass.members.map((m: any) => {
         return createLocation(uri, m);
       });
       return definitions;
-    } else if (node.tokenType.tokenName.startsWith("Argument")) {
+    } else if (tokenName.startsWith("Argument")) {
       // collect locations of pcs and all descriptions
-      const argument = response.arguments[node.title];
+      const argument = response.arguments[nodeAtPosition.title];
       const definitions: Location[] = argument.descriptions.map((d: any) => {
         return createLocation(uri, d);
       });
@@ -51,6 +31,11 @@ export const provideDefinitions = (
         definitions.push(pcsLocation);
       }
       return definitions;
+    } else if (tokenName === "Tag") {
+      // We treat each occurrence of a tag as a tag definition
+      return findReferences(response, nodeAtPosition, true).map(n =>
+        createLocation(uri, n)
+      );
     }
   }
   return [];

@@ -1,39 +1,40 @@
 import { Hover, Position } from "vscode-languageserver";
-import { findNodesContainingPosition } from "./findNodesContainingPosition";
-import {generateMarkdownForArgument, generateMarkdownForStatement} from "./utils";
+import { findNodeAtPosition } from "./findNodeAtPosition";
+import {
+  generateMarkdownForArgument,
+  generateMarkdownForStatement
+} from "./utils";
 export const provideHover = (response: any, position: Position) => {
   const line = position.line + 1;
   const character = position.character + 1;
-  const nodes = findNodesContainingPosition(
-    response.ast.children,
-    line,
-    character
-  );
-  const nodeAtPosition = nodes.reverse().find(n => {
-    if (!n.tokenType) {
-      return false;
-    }
-    switch (n.tokenType.tokenName) {
-      case "StatementReference":
-      case "StatementDefinition":
-      case "StatementMention":
-      case "ArgumentReference":
-      case "ArgumentDefinition":
-      case "ArgumentMention":
-        return true;
-    }
-    return false;
-  });
+  const nodeAtPosition = findNodeAtPosition(response, line, character);
   if (nodeAtPosition) {
-    if (nodeAtPosition.tokenType.tokenName.startsWith("Statement")) {
+    const tokenName = nodeAtPosition.tokenType.tokenName;
+    if (tokenName.startsWith("Statement")) {
       const eqClass = response.statements[nodeAtPosition.title];
       return <Hover>{
         contents: generateMarkdownForStatement(eqClass)
       };
-    } else {
+    } else if (tokenName.startsWith("Argument")) {
       const argument = response.arguments[nodeAtPosition.title];
       return <Hover>{
         contents: generateMarkdownForArgument(argument)
+      };
+    } else if (tokenName.startsWith("Tag") && nodeAtPosition.tag) {
+      const tag = nodeAtPosition.tag;
+      const statementsStr = Object.keys(response.statements)
+        .map(k => response.statements[k])
+        .filter((s: any) => s.tags && s.tags.includes(tag))
+        .reduce((acc, val) => `${acc} * [${val.title}]\n`, "");
+      const argumentsStr = Object.keys(response.arguments)
+        .map(k => response.arguments[k])
+        .filter((a: any) => a.tags && a.tags.includes(tag))
+        .reduce((acc, val) => `${acc} * <${val.title}>\n`, "");
+      const contents = `**\#(${tag}**)
+      
+${statementsStr}${argumentsStr}`;
+      return <Hover>{
+        contents
       };
     }
   }
