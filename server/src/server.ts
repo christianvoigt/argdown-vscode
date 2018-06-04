@@ -1,7 +1,6 @@
 "use strict";
 import * as path from "path";
 import {
-  CompletionItem,
   createConnection,
   TextDocuments,
   TextDocument,
@@ -15,8 +14,10 @@ import {
   Location,
   ProposedFeatures,
   Proposed,
+  RenameParams,
   ReferenceParams,
   SymbolInformation,
+  TextDocumentIdentifier,
   WorkspaceSymbolParams
 } from "vscode-languageserver";
 import Uri from "vscode-uri";
@@ -28,8 +29,13 @@ import {
   ExportDocumentArgs
 } from "./commands/Export";
 import { documentSymbolsPlugin } from "./DocumentSymbolsPlugin";
-import * as lineColumn from "line-column";
-import { findDefinitions, findReferences } from "./SymbolQuery";
+import {
+  provideDefinitions,
+  provideReferences,
+  provideHover,
+  provideCompletion,
+  provideRenameWorkspaceEdit
+} from "./providers/index";
 
 const EXPORT_CONTENT_COMMAND = "argdown.server.exportContent";
 const EXPORT_DOCUMENT_COMMAND = "argdown.server.exportDocument";
@@ -93,8 +99,10 @@ connection.onInitialize(
         definitionProvider: true,
         referencesProvider: true,
         documentHighlightProvider: true,
+        hoverProvider: true,
+        renameProvider: true,
         completionProvider: {
-          triggerCharacters: ["[", "<"]
+          triggerCharacters: ["[", "<", ":"]
         },
         executeCommandProvider: {
           commands: [
@@ -301,82 +309,79 @@ connection.onDidCloseTextDocument((params) => {
 	connection.console.log(`${params.textDocument.uri} closed.`);
 });
 */
+const processDocForProviders = async (textDocument: TextDocumentIdentifier) => {
+  const doc = documents.get(textDocument.uri);
+  const text = doc.getText();
+  const path = Uri.parse(textDocument.uri).fsPath;
+  return await processTextForProviders(text, path);
+};
+const processTextForProviders = async (text: string, path: string) => {
+  const request = {
+    input: text,
+    inputPath: path,
+    process: ["preprocessor", "parse-input", "build-model"]
+  };
+  return await argdownEngine.runAsync(request);
+};
+connection.onRenameRequest(async (params: RenameParams) => {
+  const { newName, position, textDocument } = params;
+  const doc = documents.get(textDocument.uri);
+  const response = await processDocForProviders(doc);
+  return provideRenameWorkspaceEdit(response, newName, position, textDocument, connection);
+});
+connection.onHover(async (params: TextDocumentPositionParams) => {
+  const { textDocument, position } = params;
+  const response = await processDocForProviders(textDocument);
+  return provideHover(response, position);
+});
+
+const onlyWhitespacePattern = /^\s*$/;
 connection.onCompletion(async (params: TextDocumentPositionParams) => {
   const { textDocument, position } = params;
   const path = Uri.parse(textDocument.uri).fsPath;
   const doc = documents.get(textDocument.uri);
-  const input = doc.getText();
-  const request = {
-    input: input,
-    inputPath: path,
-    process: ["preprocessor", "parse-input", "build-model"]
-  };
-  const response = await argdownEngine.runAsync(request);
-  const finder = lineColumn(input);
-  const offset = finder.toIndex(position.line + 1, position.character);
-  const left = input.charAt(offset);
-  if (left === "[") {
-    return Object.keys(response.statements).map((k: any) => {
-      const eqClass = response.statements[k];
-      const title = eqClass.title;
-      const item = CompletionItem.create(`[${title}]`);
-      item.insertText = title;
-      item.detail = eqClass.getCanonicalText();
-      return item;
-    });
-  } else if (left === "<") {
-    return Object.keys(response.arguments).map((k: any) => {
-      const argument = response.arguments[k];
-      const title = argument.title;
-      const item = CompletionItem.create(`<${title}>`);
-      item.insertText = title;
-      const desc = argument.getCanonicalDescription();
-      if (desc) {
-        item.detail = desc.text;
-      }
-      return item;
-    });
+  const txt = doc.getText();
+  const offset = doc.offsetAt(position);
+  const char = txt.charAt(offset - 1);
+  /**
+   * --- Dirty Hack: ---
+   * We have to check if we are at the end of the document and if char equals ':'.
+   * In this case the parser won't produce an ast, but only return a parser error.
+   * To avoid this, we have to remove the ':' from the parsed text.
+   **/
+  let input = txt;
+  if (char === ":") {
+    const txtAfter = txt.substr(offset);
+    if (onlyWhitespacePattern.test(txtAfter)) {
+      input = txt.substr(0, offset - 1) + txtAfter;
+    }
   }
-  return [];
-});
-connection.onDocumentHighlight(async (params: TextDocumentPositionParams) => {
-  const { textDocument, position } = params;
-  const doc = documents.get(textDocument.uri);
   const request = {
-    input: doc.getText(),
-    inputPath: path,
-    process: ["preprocessor", "parse-input", "build-model"]
-  };
-  const response = await argdownEngine.runAsync(request);
-  return findReferences(response, textDocument.uri, position).map(
-    (l: Location) => DocumentHighlight.create(l.range, 1)
-  );
-});
-connection.onReferences(async (params: ReferenceParams) => {
-  const { context, position, textDocument } = params;
-  const path = Uri.parse(textDocument.uri).fsPath;
-  const doc = documents.get(textDocument.uri);
-  const request = {
-    input: doc.getText(),
+    input,
     inputPath: path,
     process: ["preprocessor", "parse-input", "build-model"],
     logLevel: "verbose"
   };
   const response = await argdownEngine.runAsync(request);
-  return findReferences(response, textDocument.uri, position, context);
+  return provideCompletion(response, char, position, txt, offset);
+});
+connection.onDocumentHighlight(async (params: TextDocumentPositionParams) => {
+  const { textDocument, position } = params;
+  const response = await processDocForProviders(textDocument);
+  return provideReferences(response, textDocument.uri, position).map(
+    (l: Location) => DocumentHighlight.create(l.range, 1)
+  );
+});
+connection.onReferences(async (params: ReferenceParams) => {
+  const { context, position, textDocument } = params;
+  const response = await processDocForProviders(textDocument);
+  return provideReferences(response, textDocument.uri, position, context);
 });
 
 connection.onDefinition(async (params: TextDocumentPositionParams) => {
   const { textDocument, position } = params;
-  const path = Uri.parse(textDocument.uri).fsPath;
-  const doc = documents.get(textDocument.uri);
-  const request = {
-    input: doc.getText(),
-    inputPath: path,
-    process: ["preprocessor", "parse-input", "build-model"]
-  };
-  const response = await argdownEngine.runAsync(request);
-  return findDefinitions(response, textDocument.uri, position);
+  const response = await processDocForProviders(textDocument);
+  return provideDefinitions(response, textDocument.uri, position);
 });
 
 argdownEngine.addPlugin(documentSymbolsPlugin, "add-document-symbols");

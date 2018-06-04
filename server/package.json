@@ -14,7 +14,7 @@
   "dependencies": {
     "@types/node": "^8.0.53",
     "argdown-cli": "^0.11.9",
-    "line-column": "^1.0.2",
+    "argdown-parser": "^0.8.7",
     "vscode-languageserver": "^3.4.2",
     "vscode-uri": "^1.0.1"
   },
