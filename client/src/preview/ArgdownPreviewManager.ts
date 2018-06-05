@@ -13,7 +13,8 @@ export class ArgdownPreviewManager
 // So we have to wait until this becomes part of the adopted api.
 //implements vscode.WebviewPanelSerializer
 {
-  private static readonly argdownPreviewActiveContextKey = "argdownPreviewFocus";
+  private static readonly argdownPreviewActiveContextKey =
+    "argdownPreviewFocus";
 
   private readonly topmostLineMonitor = new ArgdownFileTopmostLineMonitor();
   private readonly previewConfigurations = new ArgdownPreviewConfigurationManager(
@@ -88,6 +89,7 @@ export class ArgdownPreviewManager
       webview,
       state,
       this.contentProvider,
+      this.argdownEngine,
       this.previewConfigurations,
       this.logger,
       this.topmostLineMonitor
@@ -125,6 +127,7 @@ export class ArgdownPreviewManager
       previewSettings.previewColumn,
       previewSettings.locked,
       this.contentProvider,
+      this.argdownEngine,
       this.previewConfigurations,
       this.logger,
       this.topmostLineMonitor,
@@ -157,7 +160,6 @@ export class ArgdownPreviewManager
         ArgdownPreviewManager.argdownPreviewActiveContextKey,
         webviewPanel.visible
       );
-
       this.activePreview = webviewPanel.visible ? preview : undefined;
     });
 

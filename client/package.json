@@ -1,8 +1,7 @@
 {
   "name": "argdown-vscode",
   "displayName": "Argdown",
-  "description":
-    "Syntax highlighting, linting and html/dot/json export for the Argdown argumentation syntax",
+  "description": "Syntax highlighting, linting and html/dot/json export for the Argdown argumentation syntax",
   "icon": "argdown-icon.png",
   "author": "Christian Voigt",
   "license": "MIT",
@@ -18,7 +17,10 @@
   "engines": {
     "vscode": "^1.24.0"
   },
-  "categories": ["Programming Languages", "Linters"],
+  "categories": [
+    "Programming Languages",
+    "Linters"
+  ],
   "keywords": [
     "multi-root ready",
     "argumentation",
@@ -48,8 +50,16 @@
     "languages": [
       {
         "id": "argdown",
-        "aliases": ["Argdown", "argdown"],
-        "extensions": [".ad", ".adown", ".argdown", ".argdn"],
+        "aliases": [
+          "Argdown",
+          "argdown"
+        ],
+        "extensions": [
+          ".ad",
+          ".adown",
+          ".argdown",
+          ".argdn"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],
@@ -340,7 +350,10 @@
         "when": "editorLangId == argdown"
       }
     ],
-    "argdown.previewStyles": ["./media/argdown.css", "./media/vscode.css"],
+    "argdown.previewStyles": [
+      "./media/argdown.css",
+      "./media/vscode.css"
+    ],
     "configuration": {
       "type": "object",
       "title": "Argdown configuration",
@@ -349,21 +362,39 @@
           "scope": "resource",
           "type": "string",
           "default": "argdown.config.js",
-          "description":
-            "Path at which the parser should look for an Argdown config file."
+          "description": "Path at which the parser should look for an Argdown config file."
+        },
+        "argdown.preview.trace": {
+          "type": "string",
+          "enum": [
+            "off",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Log debug and error messsages.",
+          "scope": "window"
+        },
+        "argdown.preview.doubleClickToSwitchToEditor": {
+          "scope": "window",
+          "type": "boolean",
+          "default": true,
+          "description": "Double click on element jumps to line in text editor."
         },
         "argdown.preview.lockMenu": {
           "scope": "application",
           "type": "boolean",
           "default": true,
-          "description":
-            "If false the preview menu will only be shown if the mouse moves over to the top of the preview window."
+          "description": "If false the preview menu will only be shown if the mouse moves over to the top of the preview window."
         },
         "argdown.preview.view": {
           "scope": "application",
           "type": "string",
           "default": "dagre",
-          "enum": ["html", "dagre", "vizjs"],
+          "enum": [
+            "html",
+            "dagre",
+            "vizjs"
+          ],
           "description": "The type of preview currently used"
         },
         "argdown.preview.dagre.rankSep": {
@@ -383,7 +414,12 @@
           "type": "string",
           "default": "BT",
           "description": "The direction of the ranks in the Dagre map",
-          "enum": ["BT", "TB", "LR", "RL"]
+          "enum": [
+            "BT",
+            "TB",
+            "LR",
+            "RL"
+          ]
         }
       }
     }
@@ -398,7 +434,7 @@
     "build-preview": "webpack --mode development"
   },
   "dependencies": {
-    "argdown-cli": "^0.11.5",
+    "argdown-cli": "^0.11.9",
     "vscode": "^1.1.18",
     "vscode-languageclient": "^3.4.2"
   },

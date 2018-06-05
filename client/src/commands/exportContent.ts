@@ -11,9 +11,8 @@ export interface IExportContentArgs {
   process: string;
 }
 
-const executeExport = async (
+const getTargetFileUri = async (
   resource: vscode.Uri,
-  content: string,
   filters: { [name: string]: string[] },
   defaultExtension: string
 ): Promise<vscode.Uri | undefined> => {
@@ -51,12 +50,7 @@ const saveExportedFile = async (
   filters: { [name: string]: string[] },
   defaultExtension: string
 ) => {
-  var fileUri = await executeExport(
-    resource,
-    content,
-    filters,
-    defaultExtension
-  );
+  var fileUri = await getTargetFileUri(resource, filters, defaultExtension);
   if (fileUri) {
     fs.writeFile(fileUri.fsPath, content, function(err) {
       if (err) {
@@ -66,7 +60,7 @@ const saveExportedFile = async (
   }
 };
 const savePng = async (resource: vscode.Uri, content: string) => {
-  var fileUri = await executeExport(resource, content, { PNG: ["png"] }, "png");
+  var fileUri = await getTargetFileUri(resource, { PNG: ["png"] }, "png");
   if (fileUri) {
     var data = content.replace(/^data:image\/\w+;base64,/, "");
     var buf = new Buffer(data, "base64");
@@ -84,12 +78,7 @@ const sendToLanguageServer = async (
   defaultExtension: string,
   process: string
 ) => {
-  var fileUri = await executeExport(
-    resource,
-    content,
-    filters,
-    defaultExtension
-  );
+  var fileUri = await getTargetFileUri(resource, filters, defaultExtension);
   if (fileUri) {
     const args: IExportContentArgs = {
       content,

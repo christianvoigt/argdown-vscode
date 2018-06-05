@@ -28,7 +28,7 @@ import {
   ExportContentArgs,
   ExportDocumentArgs
 } from "./commands/Export";
-import { documentSymbolsPlugin } from "./DocumentSymbolsPlugin";
+import { documentSymbolsPlugin } from "./providers/DocumentSymbolsPlugin";
 import {
   provideDefinitions,
   provideReferences,
@@ -432,8 +432,8 @@ connection.onExecuteCommand(async params => {
       return;
     }
     const args = params.arguments[0] as ExportDocumentArgs;
-    connection.console.log("args.target: " + args.target.toString());
-    await exportDocument(argdownEngine, args);
+    const doc = documents.get(args.source.toString());
+    await exportDocument(argdownEngine, args, doc);
   } else if (params.command === RUN_COMMAND) {
     if (!workspaceFolders || workspaceFolders.length == 0) {
       connection.console.log("No workspace folder found.");

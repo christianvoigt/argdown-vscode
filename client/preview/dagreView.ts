@@ -61,6 +61,7 @@ const addNode = (
   const nodeProperties: dagreD3.Label = {
     labelType: "html",
     class: node.type + "",
+    id: node.id,
     paddingBottom: 0,
     paddingTop: 0,
     paddingLeft: 0,
@@ -162,7 +163,7 @@ const generateSvg = (
     state.y = d3.event.transform.y;
     sendDidChangeZoom(state);
   });
-  state.svg.call(state.zoom);
+  state.svg.call(state.zoom).on("dblclick.zoom", null);
 
   // Run the renderer. This is what draws the final graph.
   render(svgGroup as any, g);
@@ -245,7 +246,12 @@ document.addEventListener("dblclick", event => {
     node;
     node = node.parentNode as HTMLElement
   ) {
-    if (node.tagName === "A") {
+    if (node.tagName && node.tagName === "g" && node.classList) {
+      if (node.classList.contains("node")) {
+        const id = node.id;
+        messagePoster.postMessage("didSelectMapNode", { id });
+      }
+    } else if (node.tagName === "A") {
       return;
     }
   }

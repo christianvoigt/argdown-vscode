@@ -13,6 +13,7 @@ import {
 import { ArgdownPreviewConfigurationManager } from "./ArgdownPreviewConfiguration";
 import { ArgdownExtensionContributions } from "./ArgdownExtensionContributions";
 import { isArgdownFile } from "./util/file";
+import { ArgdownEngine } from "./ArgdownEngine";
 
 export namespace PreviewViews {
   export const HTML: string = "html";
@@ -42,6 +43,7 @@ export class ArgdownPreview {
     webview: vscode.WebviewPanel,
     state: any,
     contentProvider: ArgdownContentProvider,
+    argdownEngine: ArgdownEngine,
     previewConfigurations: ArgdownPreviewConfigurationManager,
     logger: Logger,
     topmostLineMonitor: ArgdownFileTopmostLineMonitor
@@ -55,6 +57,7 @@ export class ArgdownPreview {
       resource,
       locked,
       contentProvider,
+      argdownEngine,
       previewConfigurations,
       logger,
       topmostLineMonitor
@@ -72,6 +75,7 @@ export class ArgdownPreview {
     previewColumn: vscode.ViewColumn,
     locked: boolean,
     contentProvider: ArgdownContentProvider,
+    argdownEngine: ArgdownEngine,
     previewConfigurations: ArgdownPreviewConfigurationManager,
     logger: Logger,
     topmostLineMonitor: ArgdownFileTopmostLineMonitor,
@@ -97,6 +101,7 @@ export class ArgdownPreview {
       resource,
       locked,
       contentProvider,
+      argdownEngine,
       previewConfigurations,
       logger,
       topmostLineMonitor
@@ -108,6 +113,7 @@ export class ArgdownPreview {
     resource: vscode.Uri,
     locked: boolean,
     private readonly _contentProvider: ArgdownContentProvider,
+    private readonly _argdownEngine: ArgdownEngine,
     private readonly _previewConfigurations: ArgdownPreviewConfigurationManager,
     private readonly _logger: Logger,
     topmostLineMonitor: ArgdownFileTopmostLineMonitor
@@ -115,6 +121,7 @@ export class ArgdownPreview {
     this._resource = resource;
     this._locked = locked;
     this.editor = webview;
+    this._previewConfigurations.refreshArgdownConfig(this._resource);
 
     this.sendOnDidChangeTextDocumentMessage = throttle(async () => {
       const resource = this._resource;
@@ -122,8 +129,8 @@ export class ArgdownPreview {
       this.currentVersion = { resource, version: document.version };
       const msg = await this._contentProvider.provideOnDidChangeTextDocumentMessage(
         document,
-        this._previewConfigurations,
-        this.line
+        this._previewConfigurations
+        // , this.line
       );
       msg.type = "onDidChangeTextDocument";
       msg.source = resource.toString();
@@ -183,6 +190,9 @@ export class ArgdownPreview {
             break;
           case "didChangeZoom":
             this.onDidChangeZoom(e.body.x, e.body.y, e.body.scale);
+            break;
+          case "didSelectMapNode":
+            this.onDidSelectMapNode(e.body.id);
             break;
         }
       },
@@ -498,6 +508,8 @@ export class ArgdownPreview {
       view == PreviewViews.DAGRE ||
       view == PreviewViews.VIZJS
     ) {
+      // reload argdown config on view change
+      this._previewConfigurations.refreshArgdownConfig(this._resource);
       vscode.workspace
         .getConfiguration("argdown")
         .update("preview.view", view, true);
@@ -510,9 +522,7 @@ export class ArgdownPreview {
       .update("preview.lockMenu", lockMenu, true);
   }
   private onDidChangeZoom(x: number, y: number, scale: number) {
-    const config = this._previewConfigurations.getConfiguration(
-      this._resource
-    );
+    const config = this._previewConfigurations.getConfiguration(this._resource);
     if (config.view === PreviewViews.DAGRE) {
       if (!this._stateStore[PreviewViews.DAGRE]) {
         this._stateStore[PreviewViews.DAGRE] = {};
@@ -530,6 +540,39 @@ export class ArgdownPreview {
       vizjsStore.x = x;
       vizjsStore.y = y;
     }
+  }
+  private async onDidSelectMapNode(id: string) {
+    const resource = this._resource;
+    const document = await vscode.workspace.openTextDocument(resource);
+    const config = this._previewConfigurations.getConfiguration(this._resource);
+    try {
+      const range = await this._argdownEngine.getRangeOfMapNode(
+        document,
+        config,
+        id
+      );
+      for (const visibleEditor of vscode.window.visibleTextEditors) {
+        if (this.isPreviewOf(visibleEditor.document.uri)) {
+          const editor = await vscode.window.showTextDocument(
+            visibleEditor.document,
+            visibleEditor.viewColumn
+          );
+          editor.selection = new vscode.Selection(range.start, range.end);
+          editor.revealRange(range);
+          return;
+        }
+      }
+
+      vscode.workspace
+        .openTextDocument(this._resource)
+        .then(vscode.window.showTextDocument);
+    } catch (e) {
+      this._logger.log(e.stack);
+    }
+  }
+  public refreshArgdownConfig(): void {
+    this._previewConfigurations.refreshArgdownConfig(this._resource);
+    this.refresh(false);
   }
 }
 

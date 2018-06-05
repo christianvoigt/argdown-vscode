@@ -30,9 +30,12 @@ let client: LanguageClient;
 let languageServerConfiguration: LanguageServerConfiguration;
 
 export function activate(context: vscode.ExtensionContext) {
+  vscode.languages.setLanguageConfiguration("argdown", {
+    wordPattern: /([^\`\~\!\@\$\^\&\*\(\)\=\+\[\{\]\}\\\|\;\:\'\"\,\.\<\>\/\s]+)/g
+  });
   // -- PREVIEW --
   const logger = new Logger();
-  const argdownEngine = new ArgdownEngine(logger);
+  const argdownEngine = new ArgdownEngine();
   const cspArbiter = new ExtensionContentSecurityPolicyArbiter(
     context.globalState,
     context.workspaceState

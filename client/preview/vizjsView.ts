@@ -73,7 +73,8 @@ const loadSvg = (
     state.y = d3.event.transform.y;
     sendDidChangeZoom(state);
   });
-  state.svg.call(state.zoom);
+  // remove double click listener
+  state.svg.call(state.zoom).on("dblclick.zoom", null);
   const groupNode: SVGGraphicsElement = svgGroup!.node() as SVGGraphicsElement;
   const bBox = groupNode.getBBox();
   state.graphSize.width = bBox.width;
@@ -99,7 +100,7 @@ const showAllAndCenterMap = (state: IVizjsViewState) => {
   console.log("scale: " + scale);
   const x = (positionInfo.width - state.graphSize.width * scale) / 2;
   const scaledHeight = state.graphSize.height * scale;
-  const y = scaledHeight + ((positionInfo.height - scaledHeight) / 2);
+  const y = scaledHeight + (positionInfo.height - scaledHeight) / 2;
   setZoom(x, y, scale, state);
 };
 const setZoom = (
@@ -142,17 +143,21 @@ window.addEventListener(
 );
 
 document.addEventListener("dblclick", event => {
-  if (!settings.doubleClickToSwitchToEditor) {
+  if (!state.settings.doubleClickToSwitchToEditor) {
     return;
   }
-
   // Ignore clicks on links
   for (
     let node = event.target as HTMLElement;
     node;
     node = node.parentNode as HTMLElement
   ) {
-    if (node.tagName === "A") {
+    if (node.tagName && node.tagName === "g" && node.classList) {
+      if (node.classList.contains("node")) {
+        const id = node.id;
+        messagePoster.postMessage("didSelectMapNode", { id });
+      }
+    } else if (node.tagName === "A") {
       return;
     }
   }

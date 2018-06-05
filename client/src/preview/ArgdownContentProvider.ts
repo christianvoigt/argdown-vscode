@@ -144,8 +144,8 @@ export class ArgdownContentProvider {
   }
   public async provideOnDidChangeTextDocumentMessage(
     argdownDocument: vscode.TextDocument,
-    previewConfigurations: ArgdownPreviewConfigurationManager,
-    initialLine: number | undefined = undefined
+    previewConfigurations: ArgdownPreviewConfigurationManager
+    // , initialLine: number | undefined = undefined
   ): Promise<any> {
     const sourceUri = argdownDocument.uri;
     const config = previewConfigurations.getConfiguration(sourceUri);

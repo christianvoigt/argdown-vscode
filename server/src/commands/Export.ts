@@ -1,4 +1,5 @@
 import Uri from "vscode-uri";
+import { TextDocument } from "vscode-languageserver";
 interface IDictionary<T> {
   [Key: string]: T;
 }
@@ -107,12 +108,18 @@ export const exportContent = async (
 };
 export const exportDocument = async (
   argdownEngine: any,
-  args: ExportDocumentArgs
+  args: ExportDocumentArgs,
+  doc: TextDocument | undefined
 ) => {
   let request: any = { logLevel: "verbose" };
   request.inputPath = args.source.fsPath;
   request.outputPath = args.target.fsPath;
   const getRequest = requestProviders[args.process];
   request = getRequest(request);
-  await argdownEngine.load(request);
+  if (doc) {
+    request.input = doc.getText();
+    await argdownEngine.runAsync(request);
+  } else {
+    await argdownEngine.load(request);
+  }
 };

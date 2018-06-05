@@ -25,7 +25,7 @@ export class ArgdownPreviewConfiguration {
   public readonly view: string;
   public readonly styles: string[];
   public readonly argdownConfigFile?: string;
-  public readonly argdownConfig: any;
+  public argdownConfig: any;
 
   private constructor(resource: vscode.Uri, argdownEngine: ArgdownEngine) {
     const editorConfig = vscode.workspace.getConfiguration("editor", resource);
@@ -66,8 +66,7 @@ export class ArgdownPreviewConfiguration {
       "configFile",
       undefined
     );
-    this.argdownConfig =
-      argdownEngine.loadConfig(this.argdownConfigFile, resource) || {};
+    this.refreshArgdownConfig(resource, argdownEngine);
 
     this.fontFamily = argdownConfig.get<string | undefined>(
       "preview.fontFamily",
@@ -110,6 +109,10 @@ export class ArgdownPreviewConfiguration {
 
     return true;
   }
+  refreshArgdownConfig(resource: vscode.Uri, argdownEngine: any) {
+    this.argdownConfig =
+      argdownEngine.loadConfig(this.argdownConfigFile, resource) || {};
+  }
 
   [key: string]: any;
 }
@@ -124,11 +127,11 @@ export class ArgdownPreviewConfigurationManager {
   public getConfiguration(resource: vscode.Uri): ArgdownPreviewConfiguration {
     const config = this.previewConfigurationsForWorkspaces.get(
       this.getKey(resource)
-	);
-	if(!config){
-		return this.loadAndCacheConfiguration(resource);
-	}
-	return config;
+    );
+    if (!config) {
+      return this.loadAndCacheConfiguration(resource);
+    }
+    return config;
   }
   public loadAndCacheConfiguration(
     resource: vscode.Uri
@@ -139,6 +142,12 @@ export class ArgdownPreviewConfigurationManager {
     );
     this.previewConfigurationsForWorkspaces.set(this.getKey(resource), config);
     return config;
+  }
+  public refreshArgdownConfig(resource: vscode.Uri) {
+    const config = this.getConfiguration(resource);
+    if (config) {
+      config.refreshArgdownConfig(resource, this._argdownEngine);
+    }
   }
 
   public hasConfigurationChanged(resource: vscode.Uri): boolean {
