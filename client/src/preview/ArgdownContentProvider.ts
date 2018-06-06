@@ -176,6 +176,7 @@ export class ArgdownContentProvider {
       lineCount: argdownDocument.lineCount,
       scrollPreviewWithEditor: config.scrollPreviewWithEditor,
       scrollEditorWithPreview: config.scrollEditorWithPreview,
+      syncPreviewSelectionWithEditor: config.syncPreviewSelectionWithEditor,
       doubleClickToSwitchToEditor: config.doubleClickToSwitchToEditor,
       disableSecurityWarnings: this.cspArbiter.shouldDisableSecurityWarnings(),
       ...viewStateStore

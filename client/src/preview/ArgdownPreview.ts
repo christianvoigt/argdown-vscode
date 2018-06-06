@@ -37,7 +37,8 @@ export class ArgdownPreview {
   private isScrolling = false;
   private _disposed: boolean = false;
   private _stateStore: { [key: string]: any } = {};
-  private sendOnDidChangeTextDocumentMessage: () => void;
+  private throttledSendDidChangeTextDocumentMessage: () => void;
+  private throttledSelectionSync: (selection: vscode.Selection) => void;
 
   public static async revive(
     webview: vscode.WebviewPanel,
@@ -123,7 +124,29 @@ export class ArgdownPreview {
     this.editor = webview;
     this._previewConfigurations.refreshArgdownConfig(this._resource);
 
-    this.sendOnDidChangeTextDocumentMessage = throttle(async () => {
+    this.throttledSelectionSync = throttle(
+      async (selection: vscode.Selection) => {
+        const resource = this._resource;
+        const config = this._previewConfigurations.getConfiguration(resource);
+        const document = await vscode.workspace.openTextDocument(resource);
+        const id: string = await this._argdownEngine.getMapNodeId(
+          document,
+          config,
+          selection.active.line,
+          selection.active.character
+        );
+        if (id) {
+          this.postMessage({
+            type: "didSelectMapNode",
+            source: resource.toString(),
+            id
+          });
+        }
+      },
+      300
+    );
+
+    this.throttledSendDidChangeTextDocumentMessage = throttle(async () => {
       const resource = this._resource;
       const document = await vscode.workspace.openTextDocument(resource);
       this.currentVersion = { resource, version: document.version };
@@ -132,7 +155,7 @@ export class ArgdownPreview {
         this._previewConfigurations
         // , this.line
       );
-      msg.type = "onDidChangeTextDocument";
+      msg.type = "didChangeTextDocument";
       msg.source = resource.toString();
       this.postMessage(msg);
     }, 300);
@@ -194,6 +217,9 @@ export class ArgdownPreview {
           case "didSelectMapNode":
             this.onDidSelectMapNode(e.body.id);
             break;
+          case "didSelectCluster":
+            this.onDidSelectCluster(e.body.heading);
+            break;
         }
       },
       null,
@@ -221,13 +247,20 @@ export class ArgdownPreview {
     );
 
     vscode.window.onDidChangeTextEditorSelection(
-      event => {
+      async event => {
         if (this.isPreviewOf(event.textEditor.document.uri)) {
           this.postMessage({
             type: "onDidChangeTextEditorSelection",
             line: event.selections[0].active.line,
+            character: event.selections[0].active.character,
             source: this.resource.toString()
           });
+          const config = this._previewConfigurations.getConfiguration(
+            this._resource
+          );
+          if (config && config.view !== PreviewViews.HTML) {
+            await this.throttledSelectionSync(event.selections[0]);
+          }
         }
       },
       null,
@@ -316,7 +349,7 @@ export class ArgdownPreview {
       this.forceUpdate = true;
       this.update(this._resource);
     } else {
-      this.sendOnDidChangeTextDocumentMessage();
+      this.throttledSendDidChangeTextDocumentMessage();
     }
   }
 
@@ -551,24 +584,42 @@ export class ArgdownPreview {
         config,
         id
       );
-      for (const visibleEditor of vscode.window.visibleTextEditors) {
-        if (this.isPreviewOf(visibleEditor.document.uri)) {
-          const editor = await vscode.window.showTextDocument(
-            visibleEditor.document,
-            visibleEditor.viewColumn
-          );
-          editor.selection = new vscode.Selection(range.start, range.end);
-          editor.revealRange(range);
-          return;
-        }
-      }
-
-      vscode.workspace
-        .openTextDocument(this._resource)
-        .then(vscode.window.showTextDocument);
+      this.jumpToRange(range);
     } catch (e) {
       this._logger.log(e.stack);
     }
+  }
+  private async onDidSelectCluster(headingText: string) {
+    const resource = this._resource;
+    const document = await vscode.workspace.openTextDocument(resource);
+    const config = this._previewConfigurations.getConfiguration(this._resource);
+    try {
+      const range = await this._argdownEngine.getRangeOfHeading(
+        document,
+        config,
+        headingText
+      );
+      this.jumpToRange(range);
+    } catch (e) {
+      this._logger.log(e.stack);
+    }
+  }
+  private async jumpToRange(range: vscode.Range): Promise<void> {
+    for (const visibleEditor of vscode.window.visibleTextEditors) {
+      if (this.isPreviewOf(visibleEditor.document.uri)) {
+        const editor = await vscode.window.showTextDocument(
+          visibleEditor.document,
+          visibleEditor.viewColumn
+        );
+        editor.selection = new vscode.Selection(range.start, range.end);
+        editor.revealRange(range);
+        return;
+      }
+    }
+
+    vscode.workspace
+      .openTextDocument(this._resource)
+      .then(vscode.window.showTextDocument);
   }
   public refreshArgdownConfig(): void {
     this._previewConfigurations.refreshArgdownConfig(this._resource);

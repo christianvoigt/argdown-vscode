@@ -380,6 +380,12 @@
           "default": true,
           "description": "Double click on element jumps to line in text editor."
         },
+        "argdown.preview.syncPreviewSelectionWithEditor": {
+          "scope": "window",
+          "type": "boolean",
+          "default": true,
+          "description": "Highlight and reveal arguments and statements in the map if their titles are selected in the editor"
+        },
         "argdown.preview.lockMenu": {
           "scope": "application",
           "type": "boolean",

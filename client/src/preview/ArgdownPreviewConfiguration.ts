@@ -13,6 +13,7 @@ export class ArgdownPreviewConfiguration {
   public readonly doubleClickToSwitchToEditor: boolean;
   public readonly scrollEditorWithPreview: boolean;
   public readonly scrollPreviewWithEditor: boolean;
+  public readonly syncPreviewSelectionWithEditor: boolean;
   public readonly markEditorSelection: boolean;
 
   public readonly lineHeight: number;
@@ -48,6 +49,10 @@ export class ArgdownPreviewConfiguration {
     );
     this.doubleClickToSwitchToEditor = !!argdownConfig.get<boolean>(
       "preview.doubleClickToSwitchToEditor",
+      true
+    );
+    this.syncPreviewSelectionWithEditor = !!argdownConfig.get<boolean>(
+      "preview.syncPreviewSelectionWithEditor",
       true
     );
     this.markEditorSelection = !!argdownConfig.get<boolean>(

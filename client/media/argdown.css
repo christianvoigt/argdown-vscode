@@ -434,7 +434,6 @@ a.unlock-menu {
   color: #264260;
   display: block;
 }
-
 .dagre .node.argument rect {
   fill: cornflowerblue;
   stroke: black;
@@ -506,4 +505,23 @@ a.unlock-menu {
 }
 .dagre .node.argument.tag0 rect {
   fill: #1b9e77;
+}
+
+.dagre .node.statement.selected rect {
+  stroke: turquoise;
+  stroke-width: 8px;
+}
+.dagre .node.argument.selected rect {
+  stroke: turquoise;
+  stroke-width: 8px;
+}
+.dagre .node.cluster h3 {
+  cursor: pointer;
+}
+
+.vizjs-view g.node {
+  cursor: pointer;
+}
+.vizjs-view g.cluster text {
+  cursor: pointer;
 }

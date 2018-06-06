@@ -11,6 +11,8 @@ export interface IPreviewSettings {
   x?: number;
   y?: number;
   didInitiate?: boolean;
+  syncPreviewSelectionWithEditor?: boolean;
+  transitionDuration: number;
   dagre: {
     rankDir: string;
     rankSep: number;
@@ -24,7 +26,9 @@ let defaults = {
     rankDir: "BT",
     rankSep: 50,
     nodeSep: 70
-  }
+  },
+  transitionDuration: 350,
+  syncPreviewSelectionWithEditor: true
 };
 
 export function getSettings(): IPreviewSettings {

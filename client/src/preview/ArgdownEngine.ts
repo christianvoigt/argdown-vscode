@@ -1,10 +1,12 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import { ArgdownPreviewConfiguration } from "./ArgdownPreviewConfiguration";
+import { findElementAtPositionPlugin } from "./FindElementAtPositionPlugin";
 const argdownCli = require("argdown-cli");
 const app = argdownCli.app;
 const mapMakerPlugin = app.getPlugin("MapMaker", "export-json");
 app.addPlugin(mapMakerPlugin, "build-map");
+app.addPlugin(findElementAtPositionPlugin, "find-element-at-position");
 
 export class ArgdownEngine {
   public constructor() {}
@@ -26,6 +28,82 @@ export class ArgdownEngine {
     const response = await app.runAsync(request);
     return response.html;
   }
+  public async getMapNodeId(
+    doc: vscode.TextDocument,
+    config: ArgdownPreviewConfiguration,
+    line: number,
+    character: number
+  ): Promise<string> {
+    const argdownConfig = config.argdownConfig;
+    const input = doc.getText();
+    const request = {
+      ...argdownConfig,
+      input: input,
+      findElementAtPosition: {
+        line: line + 1,
+        character: character + 1
+      },
+      process: [
+        "preprocessor",
+        "parse-input",
+        "build-model",
+        "build-map",
+        "find-element-at-position"
+      ]
+    };
+    const response = await app.runAsync(request);
+    if (response.elementAtPosition && response.elementAtPositionType) {
+      const title = response.elementAtPosition.title;
+      const elementType = response.elementAtPositionType;
+      const node = this.findNodeInMapNodeTree(
+        response.map.nodes,
+        (n: any) => n.title === title && n.type === elementType
+      );
+      return node.id || "";
+    }
+    return "";
+  }
+  public async getRangeOfHeading(
+    doc: vscode.TextDocument,
+    config: ArgdownPreviewConfiguration,
+    headingText: string
+  ): Promise<vscode.Range> {
+    const argdownConfig = config.argdownConfig;
+    const input = doc.getText();
+    const request = {
+      ...argdownConfig,
+      input: input,
+      process: ["preprocessor", "parse-input", "build-model"]
+    };
+    const response = await app.runAsync(request);
+    if (!response.sections || response.sections.length == 0) {
+      return new vscode.Range(0, 0, 0, 0);
+    }
+    const section = this.findSection(response.sections, headingText);
+    if (section) {
+      return new vscode.Range(
+        section.startLine - 1,
+        section.startColumn - 1,
+        section.startLine - 1,
+        section.startColumn - 1
+      );
+    }
+    return new vscode.Range(0, 0, 0, 0);
+  }
+  private findSection(sections: any[], headingText: string): any | null {
+    for (let section of sections) {
+      if (section.title === headingText) {
+        return section;
+      }
+      if (section.children) {
+        const descSection = this.findSection(section.children, headingText);
+        if (descSection) {
+          return descSection;
+        }
+      }
+    }
+    return null;
+  }
   public async getRangeOfMapNode(
     doc: vscode.TextDocument,
     config: ArgdownPreviewConfiguration,
@@ -39,7 +117,10 @@ export class ArgdownEngine {
       process: ["preprocessor", "parse-input", "build-model", "build-map"]
     };
     const response = await app.runAsync(request);
-    const node = this.findNodeInTree(id, response.map.nodes);
+    const node = this.findNodeInMapNodeTree(
+      response.map.nodes,
+      (n: any) => n.id === id
+    );
     if (node && node.type === "argument") {
       const argument = response.arguments[node.title];
       const desc = argument.getCanonicalDescription();
@@ -65,13 +146,16 @@ export class ArgdownEngine {
     }
     return new vscode.Range(0, 0, 0, 0);
   }
-  private findNodeInTree(id: string, nodes: any[]): any | null {
+  private findNodeInMapNodeTree(
+    nodes: any[],
+    handler: (n: any) => boolean
+  ): any | null {
     for (let node of nodes) {
-      if (node.id === id) {
+      if (handler(node)) {
         return node;
       }
       if (node.nodes) {
-        const result = this.findNodeInTree(id, node.nodes);
+        const result = this.findNodeInMapNodeTree(node.nodes, handler);
         if (result) {
           return result;
         }

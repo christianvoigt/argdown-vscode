@@ -7,6 +7,7 @@ import * as dagreD3 from "dagre-d3";
 import * as d3 from "d3";
 import { getSvgForExport, getPngAsString } from "./export";
 import { openScaleDialog } from "./scaleDialog";
+import { convertCoordsL2L } from "./utils";
 declare function require(path: string): string;
 const dagreCss = require("!raw-loader!./dagre.css");
 
@@ -26,9 +27,11 @@ interface IDagreViewState {
   y: number;
   zoom?: d3.ZoomBehavior<SVGSVGElement, null>;
   svg?: d3.Selection<SVGSVGElement, null, HTMLElement, any>;
+  svgGraph?: d3.Selection<SVGGraphicsElement, null, HTMLElement, any>;
   graphSize: { width: number; height: number };
   settings: IPreviewSettings;
   dagreCssHtml: string;
+  selectedNode?: SVGGraphicsElement;
 }
 
 const settings = getSettings();
@@ -42,6 +45,60 @@ const state: IDagreViewState = {
 };
 const getSvgEl = () => {
   return <SVGSVGElement>(<any>document.getElementById("dagre-svg")!);
+};
+const deselectSelectedNode = () => {
+  if (state.selectedNode) {
+    state.selectedNode.classList.remove("selected");
+  }
+};
+const selectNode = (id: string): void => {
+  deselectSelectedNode();
+  state.selectedNode = d3.select<SVGGraphicsElement, null>(`#${id}`).node()!;
+  if (state.selectedNode) {
+    state.selectedNode.classList.add("selected");
+    let positionInfo = state.svg!.node()!.getBoundingClientRect();
+    const point = convertCoordsL2L(
+      state.svg!.node()!,
+      state.selectedNode!,
+      state.svgGraph!.node()!
+    );
+    let x = -point.x * state.scale + positionInfo.width / 2;
+    let y = -point.y * state.scale + positionInfo.height / 2;
+
+    setZoom(x, y, state.scale, settings.transitionDuration, state);
+  }
+};
+
+const showAllAndCenterMap = (state: IDagreViewState) => {
+  if (!state.svg) {
+    return;
+  }
+  let positionInfo = state.svg.node()!.getBoundingClientRect();
+  const xScale = positionInfo.width / state.graphSize.width;
+  const yScale = positionInfo.height / state.graphSize.height;
+  const scale = Math.min(xScale, yScale);
+  const x = (positionInfo.width - state.graphSize.width * scale) / 2;
+  const y = (positionInfo.height - state.graphSize.height * scale) / 2;
+  setZoom(x, y, scale, 0, state);
+};
+const setZoom = (
+  x: number,
+  y: number,
+  scale: number,
+  duration: number,
+  state: IDagreViewState
+) => {
+  if (!state.svg || !state.zoom) {
+    return;
+  }
+  state.svg
+    .transition()
+    .duration(duration)
+    .call(
+      state.zoom.transform,
+      // eslint-disable-next-line
+      d3.zoomIdentity.translate(x, y).scale(scale)
+    );
 };
 
 const sendDidChangeZoom = throttle((state: IDagreViewState) => {
@@ -152,12 +209,12 @@ const generateSvg = (
   state.svg.selectAll("*").remove();
 
   state.svg.append("g");
-  const svgGroup = state.svg.select<SVGGraphicsElement>("g");
-  svgGroup.attr("class", "dagre");
+  state.svgGraph = state.svg.select<SVGGraphicsElement>("g");
+  state.svgGraph.attr("class", "dagre");
 
   state.zoom = d3.zoom<SVGSVGElement, null>().on("zoom", function() {
     // eslint-disable-next-line
-    svgGroup.attr("transform", d3.event.transform);
+    state.svgGraph!.attr("transform", d3.event.transform);
     state.scale = d3.event.transform.k;
     state.x = d3.event.transform.x;
     state.y = d3.event.transform.y;
@@ -166,49 +223,17 @@ const generateSvg = (
   state.svg.call(state.zoom).on("dblclick.zoom", null);
 
   // Run the renderer. This is what draws the final graph.
-  render(svgGroup as any, g);
+  render(state.svgGraph as any, g);
   state.graphSize.width = g.graph().width;
   state.graphSize.height = g.graph().height;
 
   if (!isUpdate && !settings.didInitiate) {
     showAllAndCenterMap(state);
   } else {
-    setZoom(state.x, state.y, state.scale, state);
+    setZoom(state.x, state.y, state.scale, 0, state);
   }
-  svgGroup.attr("height", state.graphSize.width * state.scale + 40);
+  state.svgGraph.attr("height", state.graphSize.width * state.scale + 40);
 };
-
-const showAllAndCenterMap = (state: IDagreViewState) => {
-  if (!state.svg) {
-    return;
-  }
-  let positionInfo = state.svg.node()!.getBoundingClientRect();
-  const xScale = positionInfo.width / state.graphSize.width;
-  const yScale = positionInfo.height / state.graphSize.height;
-  const scale = Math.min(xScale, yScale);
-  const x = (positionInfo.width - state.graphSize.width * scale) / 2;
-  const y = (positionInfo.height - state.graphSize.height * scale) / 2;
-  setZoom(x, y, scale, state);
-};
-const setZoom = (
-  x: number,
-  y: number,
-  scale: number,
-  state: IDagreViewState
-) => {
-  if (!state.svg || !state.zoom) {
-    return;
-  }
-  state.svg
-    .transition()
-    .duration(0)
-    .call(
-      state.zoom.transform,
-      // eslint-disable-next-line
-      d3.zoomIdentity.translate(x, y).scale(scale)
-    );
-};
-
 onceDocumentLoaded(() => {
   const argdownDataEl = document.getElementById("argdown-json-data");
   if (!argdownDataEl) {
@@ -226,9 +251,16 @@ window.addEventListener(
     }
 
     switch (event.data.type) {
-      case "onDidChangeTextDocument":
+      case "didChangeTextDocument":
         const argdownData = JSON.parse(event.data.json);
         generateSvg(argdownData, state, true);
+        break;
+      case "didSelectMapNode":
+        if (settings.syncPreviewSelectionWithEditor) {
+          const id = event.data.id;
+          console.log("didSelectMapNode " + id);
+          selectNode(id);
+        }
         break;
     }
   },
@@ -249,7 +281,14 @@ document.addEventListener("dblclick", event => {
     if (node.tagName && node.tagName === "g" && node.classList) {
       if (node.classList.contains("node")) {
         const id = node.id;
+        selectNode(id);
         messagePoster.postMessage("didSelectMapNode", { id });
+      } else if (node.classList.contains("cluster")) {
+        const heading = d3
+          .select(node)
+          .select<HTMLHeadingElement>("h3")
+          .node()!.textContent;
+        messagePoster.postMessage("didSelectCluster", { heading });
       }
     } else if (node.tagName === "A") {
       return;
@@ -315,6 +354,9 @@ document.addEventListener(
           event.stopPropagation();
           break;
         }
+        break;
+      } else if (node.tagName && node.tagName.toLowerCase() === "svg") {
+        deselectSelectedNode();
         break;
       }
       node = node.parentNode;

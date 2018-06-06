@@ -6,6 +6,7 @@ import throttle = require("lodash.throttle");
 import { initMenu } from "./menu";
 import { getPngAsString } from "./export";
 import { openScaleDialog } from "./scaleDialog";
+import { convertCoordsL2L } from "./utils";
 
 declare var acquireVsCodeApi: any;
 const vscode = acquireVsCodeApi();
@@ -24,6 +25,10 @@ interface IVizjsViewState {
   x: number;
   y: number;
   svg?: d3.Selection<SVGSVGElement, null, HTMLElement, any>;
+  svgGraph?: d3.Selection<SVGGraphicsElement, null, HTMLElement, any>;
+  selectedNode?: SVGGraphicsElement;
+  selectedNodeStrokeWidth?: string;
+  selectedNodeStroke?: string;
   zoom?: d3.ZoomBehavior<SVGSVGElement, null>;
   graphSize: {
     width: number;
@@ -60,14 +65,14 @@ const loadSvg = (
     svgContainer.html(vizjsSvg);
   }
   state.svg = svgContainer.select<SVGSVGElement>("svg");
-  const svgGroup = state.svg.select<SVGGraphicsElement>("g");
+  state.svgGraph = state.svg.select<SVGGraphicsElement>("g");
   state.svg.attr("class", "map-svg");
   state.svg.attr("width", "100%");
   state.svg.attr("height", "100%");
   state.svg.attr("viewBox", null);
   state.zoom = d3.zoom<SVGSVGElement, null>().on("zoom", function() {
     // eslint-disable-next-line
-    svgGroup.attr("transform", d3.event.transform);
+    state.svgGraph!.attr("transform", d3.event.transform);
     state.scale = d3.event.transform.k;
     state.x = d3.event.transform.x;
     state.y = d3.event.transform.y;
@@ -75,16 +80,33 @@ const loadSvg = (
   });
   // remove double click listener
   state.svg.call(state.zoom).on("dblclick.zoom", null);
-  const groupNode: SVGGraphicsElement = svgGroup!.node() as SVGGraphicsElement;
+  const groupNode: SVGGraphicsElement = state.svgGraph!.node() as SVGGraphicsElement;
   const bBox = groupNode.getBBox();
   state.graphSize.width = bBox.width;
   state.graphSize.height = bBox.height;
   if (!isUpdate && !settings.didInitiate) {
     showAllAndCenterMap(state);
   } else {
-    setZoom(state.x, state.y, state.scale, state);
+    setZoom(state.x, state.y, state.scale, 0, state);
   }
-  svgGroup.attr("height", state.graphSize.height * state.scale + 40);
+  state.svgGraph.attr("height", state.graphSize.height * state.scale + 40);
+};
+const getNodeWithArgdownId = (id: string): SVGGraphicsElement | undefined => {
+  const nodes = state
+    .svgGraph!.selectAll<SVGGraphicsElement, null>("g.node")
+    .nodes();
+  return nodes.find(n => getArgdownId(n) === id);
+};
+const getArgdownId = (node: SVGGraphicsElement): string => {
+  const title = d3
+    .select(node)
+    .select<SVGTitleElement>("title")
+    .node();
+  if (title) {
+    console.log("id: " + title.textContent);
+    return title.textContent || "";
+  }
+  return "";
 };
 const showAllAndCenterMap = (state: IVizjsViewState) => {
   if (!state.svg) {
@@ -94,19 +116,50 @@ const showAllAndCenterMap = (state: IVizjsViewState) => {
   const xScale = positionInfo.width / state.graphSize.width;
   const yScale = positionInfo.height / state.graphSize.height;
   const scale = Math.min(xScale, yScale);
-  console.log("positionInfo.height: " + positionInfo.height);
-  console.log("graphSize.height: " + state.graphSize.height);
-  console.log("y: " + (positionInfo.height - state.graphSize.height) / 2);
-  console.log("scale: " + scale);
   const x = (positionInfo.width - state.graphSize.width * scale) / 2;
   const scaledHeight = state.graphSize.height * scale;
   const y = scaledHeight + (positionInfo.height - scaledHeight) / 2;
-  setZoom(x, y, scale, state);
+  setZoom(x, y, scale, 0, state);
+};
+/**
+ *
+ * Because we cannot override inline styles, we have to save original inline stroke and strokeWidth attributes and put them back in on deselection.
+ */
+const deselectSelectedNode = (): void => {
+  if (state.selectedNode) {
+    state.selectedNode.classList.remove("selected");
+    const path = state.selectedNode.getElementsByTagName("path")[0];
+    path.setAttribute("stroke-width", state.selectedNodeStrokeWidth || "");
+    path.setAttribute("stroke", state.selectedNodeStroke || "");
+  }
+};
+const selectNode = (id: string): void => {
+  deselectSelectedNode();
+  state.selectedNode = getNodeWithArgdownId(id);
+  if (state.selectedNode) {
+    const path = state.selectedNode.getElementsByTagName("path")[0];
+    state.selectedNode.classList.add("selected");
+    state.selectedNodeStroke = path.getAttribute("stroke") || "";
+    state.selectedNodeStrokeWidth = path.getAttribute("stroke-width") || "";
+    path.setAttribute("stroke", "#40e0d0");
+    path.setAttribute("stroke-width", "8");
+    let positionInfo = state.svg!.node()!.getBoundingClientRect();
+    const point = convertCoordsL2L(
+      state.svg!.node()!,
+      state.selectedNode!,
+      state.svgGraph!.node()!
+    );
+    let x = -point.x * state.scale + positionInfo.width / 2;
+    let y = -point.y * state.scale + positionInfo.height / 2;
+
+    setZoom(x, y, state.scale, settings.transitionDuration, state);
+  }
 };
 const setZoom = (
   x: number,
   y: number,
   scale: number,
+  duration: number,
   state: IVizjsViewState
 ) => {
   if (!state.svg || !state.zoom) {
@@ -114,7 +167,7 @@ const setZoom = (
   }
   state.svg
     .transition()
-    .duration(0)
+    .duration(duration)
     .call(
       state.zoom.transform,
       // eslint-disable-next-line
@@ -134,8 +187,15 @@ window.addEventListener(
     }
 
     switch (event.data.type) {
-      case "onDidChangeTextDocument":
+      case "didChangeTextDocument":
         loadSvg(event.data.svg, state, true);
+        break;
+      case "didSelectMapNode":
+        if (settings.syncPreviewSelectionWithEditor) {
+          const id = event.data.id;
+          console.log("didSelectMapNode " + id);
+          selectNode(id);
+        }
         break;
     }
   },
@@ -148,14 +208,28 @@ document.addEventListener("dblclick", event => {
   }
   // Ignore clicks on links
   for (
-    let node = event.target as HTMLElement;
+    let node = event.target as Element;
     node;
-    node = node.parentNode as HTMLElement
+    node = node.parentNode as Element
   ) {
     if (node.tagName && node.tagName === "g" && node.classList) {
       if (node.classList.contains("node")) {
-        const id = node.id;
+        const g = <SVGGraphicsElement>node;
+        const id = getArgdownId(g);
+        selectNode(id);
         messagePoster.postMessage("didSelectMapNode", { id });
+        return;
+      } else if (node.classList.contains("cluster")) {
+        const heading = d3
+          .select(node)
+          .selectAll<SVGTextElement, null>("text")
+          .nodes()!
+          .reduce(
+            (acc: string, val: SVGTextElement) => acc + val.textContent,
+            ""
+          );
+        messagePoster.postMessage("didSelectCluster", { heading });
+        return;
       }
     } else if (node.tagName === "A") {
       return;
@@ -214,6 +288,9 @@ document.addEventListener(
           event.stopPropagation();
           break;
         }
+        break;
+      } else if (node.tagName && node.tagName.toLowerCase() === "svg") {
+        deselectSelectedNode();
         break;
       }
       node = node.parentNode;
